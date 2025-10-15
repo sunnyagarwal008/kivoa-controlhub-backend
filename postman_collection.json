@@ -1,0 +1,177 @@
+{
+  "info": {
+    "name": "Product Management API",
+    "description": "API collection for Product Management Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/health",
+          "host": ["{{base_url}}"],
+          "path": ["api", "health"]
+        },
+        "description": "Check if the API is running"
+      }
+    },
+    {
+      "name": "Generate Presigned URL",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"filename\": \"product_image.jpg\",\n    \"content_type\": \"image/jpeg\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/presigned-url",
+          "host": ["{{base_url}}"],
+          "path": ["api", "presigned-url"]
+        },
+        "description": "Generate a presigned URL for uploading images to S3"
+      }
+    },
+    {
+      "name": "Create Product",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"category\": \"Electronics\",\n    \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid.jpg\",\n    \"mrp\": 1000.00,\n    \"price\": 850.00,\n    \"discount\": 150.00,\n    \"gst\": 18.00\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/products",
+          "host": ["{{base_url}}"],
+          "path": ["api", "products"]
+        },
+        "description": "Create a new product with status set to pending"
+      }
+    },
+    {
+      "name": "Bulk Create Products",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"products\": [\n        {\n            \"category\": \"Electronics\",\n            \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid1.jpg\",\n            \"mrp\": 1000.00,\n            \"price\": 850.00,\n            \"discount\": 150.00,\n            \"gst\": 18.00\n        },\n        {\n            \"category\": \"Clothing\",\n            \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid2.jpg\",\n            \"mrp\": 500.00,\n            \"price\": 400.00,\n            \"discount\": 100.00,\n            \"gst\": 12.00\n        },\n        {\n            \"category\": \"Books\",\n            \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid3.jpg\",\n            \"mrp\": 300.00,\n            \"price\": 250.00,\n            \"discount\": 50.00,\n            \"gst\": 5.00\n        }\n    ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/products/bulk",
+          "host": ["{{base_url}}"],
+          "path": ["api", "products", "bulk"]
+        },
+        "description": "Create multiple products in a single request (max 100 products)"
+      }
+    },
+    {
+      "name": "Get All Products",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/products?page=1&per_page=10",
+          "host": ["{{base_url}}"],
+          "path": ["api", "products"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "per_page",
+              "value": "10"
+            },
+            {
+              "key": "status",
+              "value": "pending",
+              "disabled": true
+            },
+            {
+              "key": "category",
+              "value": "Electronics",
+              "disabled": true
+            }
+          ]
+        },
+        "description": "Get all products with optional filtering and pagination"
+      }
+    },
+    {
+      "name": "Get Product by ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/products/1",
+          "host": ["{{base_url}}"],
+          "path": ["api", "products", "1"]
+        },
+        "description": "Get a single product by ID"
+      }
+    },
+    {
+      "name": "Update Product",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"price\": 800.00,\n    \"discount\": 200.00,\n    \"status\": \"approved\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/products/1",
+          "host": ["{{base_url}}"],
+          "path": ["api", "products", "1"]
+        },
+        "description": "Update an existing product (partial updates allowed)"
+      }
+    },
+    {
+      "name": "Delete Product",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/products/1",
+          "host": ["{{base_url}}"],
+          "path": ["api", "products", "1"]
+        },
+        "description": "Delete a product by ID"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ]
+}
+
