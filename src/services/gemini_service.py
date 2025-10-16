@@ -20,7 +20,6 @@ class GeminiService:
         """Get or create Gemini client"""
         if self.client is None:
             self.client = genai.Client(api_key=current_app.config['GEMINI_API_KEY'])
-            # AIzaSyDcuBmFCnnoi8GRMS5TlxtXsebkUIrK9s8
         return self.client
 
     def generate_images(self, input_file_path: str, prompt_category: str, number_of_images: int = 3):
@@ -51,8 +50,7 @@ class GeminiService:
         contents.append(genai.types.Part.from_text(text=prompt))
         generate_content_config = types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"])
         print(f"Image {image_path}, prompt: {prompt}")
-        #client = self._get_client()
-        client = genai.Client(api_key=current_app.config['GEMINI_API_KEY'])
+        client = self._get_client()
         stream = client.models.generate_content_stream(
             model=current_app.config['GEMINI_MODEL'],
             contents=contents,
