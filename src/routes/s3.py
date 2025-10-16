@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from marshmallow import ValidationError
 from src.schemas import PresignedUrlRequestSchema, PresignedUrlResponseSchema
-from src.s3_service import s3_service
+from src.services import s3_service
 
 s3_bp = Blueprint('s3', __name__)
 

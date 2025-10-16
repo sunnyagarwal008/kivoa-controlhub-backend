@@ -3,26 +3,31 @@ from flask_cors import CORS
 from src.config import config
 from src.database import init_db
 from src.routes import api
+from src.workers import start_worker
 import os
 
 
 def create_app(config_name=None):
     """Application factory pattern"""
-    
+
     if config_name is None:
         config_name = os.getenv('FLASK_ENV', 'development')
-    
+
     app = Flask(__name__)
     app.config.from_object(config[config_name])
-    
+
     # Enable CORS
     CORS(app)
-    
+
     # Initialize database
     init_db(app)
-    
+
     # Register blueprints
     app.register_blueprint(api)
+
+    # Start worker thread for SQS processing
+    with app.app_context():
+        start_worker(app)
     
     # Root endpoint
     @app.route('/')

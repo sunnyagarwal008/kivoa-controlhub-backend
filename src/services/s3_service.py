@@ -21,6 +21,22 @@ class S3Service:
                 region_name=current_app.config['AWS_REGION']
             )
         return self.s3_client
+
+    def upload_file(self, file_path, bucket_name, key):
+        s3_client = self._get_s3_client()
+        s3_client.upload_file(file_path, bucket_name, key)
+
+        # Construct file URL (assuming public bucket or CDN)
+        region = current_app.config.get('AWS_REGION', 'ap-south-1')
+        cdn_domain = current_app.config.get('CDN_DOMAIN')  # optional custom domain
+
+        if cdn_domain:
+            file_url = f"https://{cdn_domain}/{key}"
+        else:
+            file_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{key}"
+
+        return file_url
+
     
     def generate_presigned_url(self, filename, content_type):
         """

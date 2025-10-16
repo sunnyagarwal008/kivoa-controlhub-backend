@@ -5,6 +5,9 @@ A Flask-based REST API for managing product uploads from an Android application 
 ## Features
 
 - **Product Management**: Create, read, update, and delete products
+- **Bulk Upload**: Create multiple products in a single API call
+- **AI Image Enhancement**: Automatic image enhancement using Google Gemini AI
+- **Background Processing**: SQS-based queue with background worker thread
 - **S3 Integration**: Generate presigned URLs for direct image uploads to AWS S3
 - **PostgreSQL Database**: Robust data storage with SQLAlchemy ORM
 - **Automatic Status Management**: Products automatically set to "pending" status on creation
@@ -16,9 +19,27 @@ A Flask-based REST API for managing product uploads from an Android application 
 - **Framework**: Flask 3.0
 - **Database**: PostgreSQL with SQLAlchemy ORM
 - **Cloud Storage**: AWS S3 with boto3
+- **Message Queue**: AWS SQS
+- **AI/ML**: Google Gemini AI
+- **Image Processing**: Pillow
 - **Validation**: Marshmallow
 - **CORS**: Flask-CORS
 - **Database Migrations**: Flask-Migrate
+
+## Project Structure
+
+The project follows a modular architecture with clear separation of concerns:
+
+```
+src/
+├── models/          # Database models (SQLAlchemy ORM)
+├── schemas/         # Validation schemas (Marshmallow)
+├── services/        # Business logic & external services (S3, SQS, Gemini)
+├── workers/         # Background workers (Image enhancement)
+└── routes/          # API endpoints (Flask Blueprints)
+```
+
+See [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md) for detailed documentation.
 
 ## Installation
 
@@ -231,9 +252,35 @@ Response:
 - `price`: Numeric(10, 2) - Selling Price
 - `discount`: Numeric(10, 2)
 - `gst`: Numeric(10, 2)
-- `status`: String(20) - Default: "pending"
+- `status`: String(20) - Default: "pending" → "pending_review" → "approved"/"rejected"
 - `created_at`: DateTime
 - `updated_at`: DateTime
+
+### Product Images Table
+- `id`: Integer (Primary Key)
+- `product_id`: Integer (Foreign Key → products.id)
+- `image_url`: String(500) - S3 URL of enhanced image
+- `status`: String(20) - "pending", "approved", "rejected"
+- `created_at`: DateTime
+- `updated_at`: DateTime
+
+## AI Image Enhancement
+
+The system includes automatic image enhancement using Google Gemini AI:
+
+1. **Bulk Upload** → Products created with status "pending"
+2. **SQS Queue** → Product IDs sent to queue for processing
+3. **Background Worker** → Processes each product asynchronously:
+   - Downloads raw image from S3
+   - Uses Gemini AI to analyze and generate enhancement prompts
+   - Creates multiple enhanced images (configurable)
+   - Uploads enhanced images to S3
+   - Saves to `product_images` table
+   - Updates product status to "pending_review"
+
+**Setup Guide:** See [QUICK_START_IMAGE_ENHANCEMENT.md](QUICK_START_IMAGE_ENHANCEMENT.md)
+
+**Full Documentation:** See [IMAGE_ENHANCEMENT_SETUP.md](IMAGE_ENHANCEMENT_SETUP.md)
 
 ## Error Handling
 

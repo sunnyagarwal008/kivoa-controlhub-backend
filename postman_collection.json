@@ -41,28 +41,6 @@
       }
     },
     {
-      "name": "Create Product",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n    \"category\": \"Electronics\",\n    \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid.jpg\",\n    \"mrp\": 1000.00,\n    \"price\": 850.00,\n    \"discount\": 150.00,\n    \"gst\": 18.00\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/products",
-          "host": ["{{base_url}}"],
-          "path": ["api", "products"]
-        },
-        "description": "Create a new product with status set to pending"
-      }
-    },
-    {
       "name": "Bulk Create Products",
       "request": {
         "method": "POST",

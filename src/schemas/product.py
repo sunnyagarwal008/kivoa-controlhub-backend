@@ -36,23 +36,13 @@ class ProductSchema(Schema):
             raise ValidationError('GST cannot be negative')
 
 
-class PresignedUrlRequestSchema(Schema):
-    """Schema for presigned URL request validation"""
-    
-    filename = fields.Str(required=True, validate=validate.Length(min=1, max=255))
-    content_type = fields.Str(required=True, validate=validate.OneOf([
-        'image/jpeg',
-        'image/jpg',
-        'image/png',
-        'image/gif',
-        'image/webp'
-    ]))
+class ProductImageSchema(Schema):
+    """Schema for product image validation"""
 
-
-class PresignedUrlResponseSchema(Schema):
-    """Schema for presigned URL response"""
-    
-    presigned_url = fields.Str(required=True)
-    file_url = fields.Str(required=True)
-    expires_in = fields.Int(required=True)
+    id = fields.Int(dump_only=True)
+    product_id = fields.Int(required=True)
+    image_url = fields.Str(required=True, validate=validate.Length(min=1, max=500))
+    status = fields.Str(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
 
