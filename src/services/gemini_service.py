@@ -53,8 +53,6 @@ class GeminiService:
         print(f"Image {image_path}, prompt: {prompt}")
         #client = self._get_client()
         client = genai.Client(api_key=current_app.config['GEMINI_API_KEY'])
-        # AIzaSyDcuBmFCnnoi8GRMS5TlxtXsebkUIrK9s8
-        print(current_app.config['GEMINI_API_KEY'])
         stream = client.models.generate_content_stream(
             model=current_app.config['GEMINI_MODEL'],
             contents=contents,
