@@ -62,6 +62,7 @@ class Product(db.Model):
     discount = db.Column(db.Numeric(10, 2), nullable=False)
     gst = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.String(20), nullable=False, default='pending')
+    in_stock = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -91,6 +92,7 @@ class Product(db.Model):
             'discount': float(self.discount),
             'gst': float(self.gst),
             'status': self.status,
+            'in_stock': self.in_stock,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

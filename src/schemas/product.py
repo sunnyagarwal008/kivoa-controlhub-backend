@@ -39,6 +39,7 @@ class ProductSchema(Schema):
     discount = fields.Decimal(required=True, as_string=False, places=2)
     gst = fields.Decimal(required=True, as_string=False, places=2)
     status = fields.Str(dump_only=True)
+    in_stock = fields.Bool(dump_only=True)
     images = fields.Nested(ProductImageSchema, many=True, dump_only=True)  # Product images
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)

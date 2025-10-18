@@ -212,7 +212,7 @@ def get_products():
                 'pages': pagination.pages
             }
         }), 200
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -323,14 +323,14 @@ def update_product(product_id):
             'message': 'Product updated successfully',
             'data': product_schema.dump(product)
         }), 200
-        
+
     except ValidationError as e:
         return jsonify({
             'success': False,
             'error': 'Validation error',
             'details': e.messages
         }), 400
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({
@@ -551,3 +551,125 @@ def update_image_status(product_id, image_id):
             'error': str(e)
         }), 500
 
+
+
+@products_bp.route('/products/<int:product_id>/status', methods=['PUT'])
+def update_product_status(product_id):
+    """
+    Update product status to 'live' or 'rejected'
+
+    Request Body:
+        {
+            "status": "live" | "rejected"
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Product status updated to 'live' successfully",
+            "data": {
+                "id": 1,
+                "status": "live",
+                ...
+            }
+        }
+    """
+    try:
+        product = Product.query.get_or_404(product_id)
+
+        # Get request data
+        data = request.get_json()
+
+        if not data or 'status' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing "status" field in request body'
+            }), 400
+
+        new_status = data['status'].lower()
+
+        # Validate status
+        valid_statuses = ['live', 'rejected']
+        if new_status not in valid_statuses:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'
+            }), 400
+
+        # Update product status
+        product.status = new_status
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Product status updated to "{new_status}" successfully',
+            'data': product_schema.dump(product)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@products_bp.route('/products/<int:product_id>/stock', methods=['PUT'])
+def update_product_stock(product_id):
+    """
+    Update product stock status (in_stock or out_of_stock)
+
+    Request Body:
+        {
+            "in_stock": true | false
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Product marked as in stock successfully",
+            "data": {
+                "id": 1,
+                "in_stock": true,
+                ...
+            }
+        }
+    """
+    try:
+        product = Product.query.get_or_404(product_id)
+
+        # Get request data
+        data = request.get_json()
+
+        if not data or 'in_stock' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing "in_stock" field in request body'
+            }), 400
+
+        in_stock = data['in_stock']
+
+        # Validate in_stock is boolean
+        if not isinstance(in_stock, bool):
+            return jsonify({
+                'success': False,
+                'error': '"in_stock" must be a boolean value (true or false)'
+            }), 400
+
+        # Update product stock status
+        product.in_stock = in_stock
+        db.session.commit()
+
+        stock_status = 'in stock' if in_stock else 'out of stock'
+        return jsonify({
+            'success': True,
+            'message': f'Product marked as {stock_status} successfully',
+            'data': product_schema.dump(product)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
