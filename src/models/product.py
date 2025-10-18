@@ -71,9 +71,15 @@ class Product(db.Model):
     def __repr__(self):
         return f'<Product {self.id} - {self.sku}>'
 
-    def to_dict(self):
-        """Convert product object to dictionary"""
-        return {
+    def to_dict(self, include_category_details=False, include_images=False):
+        """
+        Convert product object to dictionary
+
+        Args:
+            include_category_details (bool): Include full category object
+            include_images (bool): Include product images
+        """
+        result = {
             'id': self.id,
             'category_id': self.category_id,
             'category': self.category_ref.name if self.category_ref else None,
@@ -88,6 +94,16 @@ class Product(db.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
+
+        # Include full category details if requested
+        if include_category_details and self.category_ref:
+            result['category_details'] = self.category_ref.to_dict()
+
+        # Include product images if requested
+        if include_images:
+            result['images'] = [img.to_dict() for img in self.product_images]
+
+        return result
 
 
 class ProductImage(db.Model):

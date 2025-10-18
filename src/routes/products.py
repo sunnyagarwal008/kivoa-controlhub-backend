@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
+from sqlalchemy.orm import joinedload
 from src.database import db
-from src.models import Category, Product
+from src.models import Category, Product, ProductImage
 from src.schemas import ProductSchema
 from src.services import sqs_service
 
@@ -13,53 +14,6 @@ products_schema = ProductSchema(many=True)
 
 @products_bp.route('/products/bulk', methods=['POST'])
 def bulk_create_products():
-    """
-    Create multiple products in a single request
-
-    Note: This is an all-or-nothing operation. If any product fails validation,
-    the entire request will fail and no products will be created.
-
-    Request Body:
-        {
-            "products": [
-                {
-                    "category": "Electronics",
-                    "purchase_month": "0124",
-                    "raw_image": "https://bucket.s3.region.amazonaws.com/products/uuid1.jpg",
-                    "mrp": 1000.00,
-                    "price": 850.00,
-                    "discount": 150.00,
-                    "gst": 18.00
-                },
-                {
-                    "category": "Clothing",
-                    "purchase_month": "0124",
-                    "raw_image": "https://bucket.s3.region.amazonaws.com/products/uuid2.jpg",
-                    "mrp": 500.00,
-                    "price": 400.00,
-                    "discount": 100.00,
-                    "gst": 12.00
-                }
-            ]
-        }
-
-    Response (Success):
-        {
-            "success": true,
-            "message": "Successfully created 2 products",
-            "data": {
-                "created": 2,
-                "total": 2,
-                "products": [...]
-            }
-        }
-
-    Response (Error):
-        {
-            "success": false,
-            "error": "Validation error or exception message"
-        }
-    """
     try:
         request_data = request.get_json()
 
@@ -223,25 +177,34 @@ def get_products():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
 
-        # Build query
-        query = Product.query
+        # Build query with eager loading of category and images
+        query = Product.query.options(
+            joinedload(Product.category_ref),
+            joinedload(Product.product_images)
+        )
 
         if status:
             query = query.filter_by(status=status)
 
         if category_id:
             query = query.filter_by(category_id=category_id)
-        
+
         # Paginate results
         pagination = query.order_by(Product.created_at.desc()).paginate(
             page=page,
             per_page=per_page,
             error_out=False
         )
-        
+
+        # Convert products to dict with category details and images
+        products_data = [
+            product.to_dict(include_category_details=True, include_images=True)
+            for product in pagination.items
+        ]
+
         return jsonify({
             'success': True,
-            'data': products_schema.dump(pagination.items),
+            'data': products_data,
             'pagination': {
                 'page': pagination.page,
                 'per_page': pagination.per_page,
@@ -260,22 +223,33 @@ def get_products():
 @products_bp.route('/products/<int:product_id>', methods=['GET'])
 def get_product(product_id):
     """
-    Get a single product by ID
-    
+    Get a single product by ID with category details and images
+
     Response:
         {
             "success": true,
-            "data": {...}
+            "data": {
+                "id": 1,
+                "category_id": 1,
+                "category": "Electronics",
+                "category_details": {...},
+                "images": [...],
+                ...
+            }
         }
     """
     try:
-        product = Product.query.get_or_404(product_id)
-        
+        # Query with eager loading of category and images
+        product = Product.query.options(
+            joinedload(Product.category_ref),
+            joinedload(Product.product_images)
+        ).get_or_404(product_id)
+
         return jsonify({
             'success': True,
-            'data': product_schema.dump(product)
+            'data': product.to_dict(include_category_details=True, include_images=True)
         }), 200
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -369,7 +343,7 @@ def update_product(product_id):
 def delete_product(product_id):
     """
     Delete a product
-    
+
     Response:
         {
             "success": true,
@@ -378,15 +352,198 @@ def delete_product(product_id):
     """
     try:
         product = Product.query.get_or_404(product_id)
-        
+
         db.session.delete(product)
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'message': 'Product deleted successfully'
         }), 200
-        
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@products_bp.route('/products/<int:product_id>/images/<int:image_id>/approve', methods=['PUT'])
+def approve_product_image(product_id, image_id):
+    """
+    Approve a product image
+
+    Response:
+        {
+            "success": true,
+            "message": "Image approved successfully",
+            "data": {
+                "id": 1,
+                "product_id": 1,
+                "image_url": "https://...",
+                "status": "approved",
+                "created_at": "...",
+                "updated_at": "..."
+            }
+        }
+    """
+    try:
+        # Verify product exists
+        product = Product.query.get_or_404(product_id)
+
+        # Get the image and verify it belongs to this product
+        image = ProductImage.query.filter_by(
+            id=image_id,
+            product_id=product_id
+        ).first()
+
+        if not image:
+            return jsonify({
+                'success': False,
+                'error': f'Image {image_id} not found for product {product_id}'
+            }), 404
+
+        # Update image status
+        image.status = 'approved'
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Image approved successfully',
+            'data': image.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@products_bp.route('/products/<int:product_id>/images/<int:image_id>/reject', methods=['PUT'])
+def reject_product_image(product_id, image_id):
+    """
+    Reject a product image
+
+    Response:
+        {
+            "success": true,
+            "message": "Image rejected successfully",
+            "data": {
+                "id": 1,
+                "product_id": 1,
+                "image_url": "https://...",
+                "status": "rejected",
+                "created_at": "...",
+                "updated_at": "..."
+            }
+        }
+    """
+    try:
+        # Verify product exists
+        product = Product.query.get_or_404(product_id)
+
+        # Get the image and verify it belongs to this product
+        image = ProductImage.query.filter_by(
+            id=image_id,
+            product_id=product_id
+        ).first()
+
+        if not image:
+            return jsonify({
+                'success': False,
+                'error': f'Image {image_id} not found for product {product_id}'
+            }), 404
+
+        # Update image status
+        image.status = 'rejected'
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Image rejected successfully',
+            'data': image.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@products_bp.route('/products/<int:product_id>/images/<int:image_id>/status', methods=['PUT'])
+def update_image_status(product_id, image_id):
+    """
+    Update product image status (generic endpoint)
+
+    Request Body:
+        {
+            "status": "approved" | "rejected" | "pending"
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Image status updated successfully",
+            "data": {
+                "id": 1,
+                "product_id": 1,
+                "image_url": "https://...",
+                "status": "approved",
+                "created_at": "...",
+                "updated_at": "..."
+            }
+        }
+    """
+    try:
+        # Verify product exists
+        product = Product.query.get_or_404(product_id)
+
+        # Get the image and verify it belongs to this product
+        image = ProductImage.query.filter_by(
+            id=image_id,
+            product_id=product_id
+        ).first()
+
+        if not image:
+            return jsonify({
+                'success': False,
+                'error': f'Image {image_id} not found for product {product_id}'
+            }), 404
+
+        # Get request data
+        data = request.get_json()
+
+        if not data or 'status' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing "status" field in request body'
+            }), 400
+
+        new_status = data['status'].lower()
+
+        # Validate status
+        valid_statuses = ['pending', 'approved', 'rejected']
+        if new_status not in valid_statuses:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'
+            }), 400
+
+        # Update image status
+        image.status = new_status
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Image status updated to "{new_status}" successfully',
+            'data': image.to_dict()
+        }), 200
+
     except Exception as e:
         db.session.rollback()
         return jsonify({
