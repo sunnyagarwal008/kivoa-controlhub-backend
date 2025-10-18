@@ -1,4 +1,4 @@
-from src.models.product import Product, ProductImage
+from src.models.product import Category, Product, ProductImage
 
-__all__ = ['Product', 'ProductImage']
+__all__ = ['Category', 'Product', 'ProductImage']
 

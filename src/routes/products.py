@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
 from src.database import db
-from src.models import Product
+from src.models import Category, Product
 from src.schemas import ProductSchema
 from src.services import sqs_service
 
@@ -24,6 +24,7 @@ def bulk_create_products():
             "products": [
                 {
                     "category": "Electronics",
+                    "purchase_month": "0124",
                     "raw_image": "https://bucket.s3.region.amazonaws.com/products/uuid1.jpg",
                     "mrp": 1000.00,
                     "price": 850.00,
@@ -32,6 +33,7 @@ def bulk_create_products():
                 },
                 {
                     "category": "Clothing",
+                    "purchase_month": "0124",
                     "raw_image": "https://bucket.s3.region.amazonaws.com/products/uuid2.jpg",
                     "mrp": 500.00,
                     "price": 400.00,
@@ -94,9 +96,23 @@ def bulk_create_products():
             # Validate product data
             validated_data = product_schema.load(product_data)
 
+            # Get category by name and validate it exists
+            category_name = validated_data['category']
+            category = Category.query.filter_by(name=category_name).first()
+            if not category:
+                return jsonify({
+                    'success': False,
+                    'error': f'Category "{category_name}" not found at index {index}. Please create the category first.'
+                }), 400
+
+            # Generate SKU for the product
+            sku = category.generate_sku(validated_data['purchase_month'])
+
             # Create new product with status set to 'pending'
             product = Product(
-                category=validated_data['category'],
+                category_id=category.id,
+                sku=sku,
+                purchase_month=validated_data['purchase_month'],
                 raw_image=validated_data['raw_image'],
                 mrp=validated_data['mrp'],
                 price=validated_data['price'],
@@ -141,17 +157,53 @@ def bulk_create_products():
         }), 500
 
 
+@products_bp.route('/categories', methods=['GET'])
+def get_categories():
+    """
+    Get all categories
+
+    Response:
+        {
+            "success": true,
+            "data": [
+                {
+                    "id": 1,
+                    "name": "Electronics",
+                    "prefix": "ELEC",
+                    "sku_sequence_number": 5,
+                    "created_at": "...",
+                    "updated_at": "..."
+                },
+                ...
+            ]
+        }
+    """
+    try:
+        categories = Category.query.order_by(Category.name).all()
+
+        return jsonify({
+            'success': True,
+            'data': [category.to_dict() for category in categories]
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @products_bp.route('/products', methods=['GET'])
 def get_products():
     """
     Get all products with optional filtering
-    
+
     Query Parameters:
         - status: Filter by status (e.g., pending, approved, rejected)
-        - category: Filter by category
+        - category_id: Filter by category ID
         - page: Page number (default: 1)
         - per_page: Items per page (default: 10)
-    
+
     Response:
         {
             "success": true,
@@ -167,18 +219,18 @@ def get_products():
     try:
         # Get query parameters
         status = request.args.get('status')
-        category = request.args.get('category')
+        category_id = request.args.get('category_id', type=int)
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
-        
+
         # Build query
         query = Product.query
-        
+
         if status:
             query = query.filter_by(status=status)
-        
-        if category:
-            query = query.filter_by(category=category)
+
+        if category_id:
+            query = query.filter_by(category_id=category_id)
         
         # Paginate results
         pagination = query.order_by(Product.created_at.desc()).paginate(
@@ -235,26 +287,63 @@ def get_product(product_id):
 def update_product(product_id):
     """
     Update a product
-    
+
     Request Body:
         {
             "category": "Electronics",
+            "purchase_month": "0124",
             "price": 800.00,
             ...
         }
+
+    Note: SKU is auto-generated and cannot be updated directly.
     """
     try:
         product = Product.query.get_or_404(product_id)
-        
+
         # Validate request data (partial update allowed)
         data = product_schema.load(request.get_json(), partial=True)
-        
-        # Update product fields
+
+        # Check if category or purchase_month is being updated
+        category_changed = False
+        new_category_id = product.category_id
+
+        if 'category' in data:
+            # Look up category by name
+            category_name = data['category']
+            category = Category.query.filter_by(name=category_name).first()
+            if not category:
+                return jsonify({
+                    'success': False,
+                    'error': f'Category "{category_name}" not found. Please create the category first.'
+                }), 400
+
+            if category.id != product.category_id:
+                category_changed = True
+                new_category_id = category.id
+
+        purchase_month_changed = 'purchase_month' in data and data['purchase_month'] != product.purchase_month
+
+        # If category or purchase_month changes, regenerate SKU
+        if category_changed or purchase_month_changed:
+            new_purchase_month = data.get('purchase_month', product.purchase_month)
+
+            # Get the category
+            category = Category.query.get(new_category_id)
+
+            # Generate new SKU
+            new_sku = category.generate_sku(new_purchase_month)
+            product.sku = new_sku
+            product.category_id = new_category_id
+            product.purchase_month = new_purchase_month
+
+        # Update other product fields (excluding category, category_id, sku, purchase_month as they're handled above)
         for key, value in data.items():
-            setattr(product, key, value)
-        
+            if key not in ['category', 'category_id', 'sku', 'purchase_month']:
+                setattr(product, key, value)
+
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'message': 'Product updated successfully',

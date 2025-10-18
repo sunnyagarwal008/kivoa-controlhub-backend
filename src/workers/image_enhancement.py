@@ -44,16 +44,19 @@ class WorkerThread(threading.Thread):
                 if not product:
                     current_app.logger.error(f"Product {product_id} not found")
                     return False
-                
-                current_app.logger.info(f"Processing product {product_id} - {product.category}")
-                
+
+                # Get category name from relationship
+                category_name = product.category_ref.name if product.category_ref else 'default'
+
+                current_app.logger.info(f"Processing product {product_id} - {category_name}")
+
                 # Download the raw image
                 raw_image = download_image(product.raw_image)
-                
+
                 # Get the configured number of enhanced images to generate
                 ai_images_count = current_app.config['ENHANCED_IMAGES_COUNT']
 
-                ai_images = gemini_service.generate_images(raw_image, product.category, ai_images_count)
+                ai_images = gemini_service.generate_images(raw_image, category_name, ai_images_count)
                 created_image_urls = []
                 
                 # Generate enhanced images

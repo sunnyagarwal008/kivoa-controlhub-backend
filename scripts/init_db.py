@@ -12,7 +12,6 @@ sys.path.insert(0, str(project_root))
 
 from src.app import create_app
 from src.database import db
-from src.models import Product
 
 def init_database():
     """Initialize the database with all tables"""
