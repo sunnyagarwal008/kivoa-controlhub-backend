@@ -10,3 +10,4 @@ gunicorn==21.2.0
 Pillow==10.2.0
 requests==2.31.0
 google-genai>=0.1.0
+sqlalchemy-cockroachdb>=2.0.3
