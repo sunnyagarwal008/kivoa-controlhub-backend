@@ -1,4 +1,4 @@
-from marshmallow import Schema, fields, validate, validates, ValidationError
+from marshmallow import Schema, fields, validate, validates, ValidationError, EXCLUDE
 import re
 
 
@@ -26,6 +26,9 @@ class ProductImageSchema(Schema):
 
 class ProductSchema(Schema):
     """Schema for product validation"""
+
+    class Meta:
+        unknown = EXCLUDE  # Ignore unknown fields during deserialization
 
     id = fields.Int(dump_only=True)
     category_id = fields.Int(dump_only=True)  # Computed from category name
