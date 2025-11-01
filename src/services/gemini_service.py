@@ -28,11 +28,9 @@ class GeminiService:
         for i in range(1, number_of_images + 1):
             prompt = random.choice(prompts[i - 1])
             image_name = input_file_path.split("/")[-1]
-            input_image_parts = image_name.split(".")
-            image_prefix = input_image_parts[0]
+            image_name_parts = image_name.split(".")
 
-            sku = image_prefix[:image_prefix.rfind('-')]
-            output_image_name = f"{sku}-0{i}.{input_image_parts[1]}"
+            output_image_name = f"{image_name_parts[0]}-0{i}.{image_name_parts[1]}"
             output_file = os.path.join("/tmp", f"{output_image_name}")
             self._do_generate_image(input_file_path, output_file, prompt)
             output_images.append(output_file)
