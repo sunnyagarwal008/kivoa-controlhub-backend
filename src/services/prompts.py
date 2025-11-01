@@ -35,6 +35,10 @@ RING_PROMPTS_MIRROR = [
     "A standing mirror reflecting a ring placed in front, luxury styling with satin drapes and perfume bottles blurred in the background. Focus on the ring and blur the background. Do not change the input ring in any way.",
 ]
 
+EARRING_PROMPTS = [
+    "Artistic focus shot of earrings placed on satin cloth, surrounded by scattered gemstones and a luxury perfume bottle in background. Focus on the earrings and blur the background. Do not change the input earrings in any way.",
+]
+
 DEFAULT_PROMPTS = [
     ""
     ]
@@ -43,6 +47,7 @@ DEFAULT_PROMPTS = [
 ALL_PROMPT_CATEGORIES = {
     'necklace': [NECKLACE_PROMPTS],
     'ring': [RING_PROMPTS_MODEL_HAND, RING_PROMPTS_SATIN, RING_PROMPTS_MIRROR],
+    'earring': [EARRING_PROMPTS],
     'default' : [DEFAULT_PROMPTS],
 }
 
