@@ -148,6 +148,59 @@ def get_categories():
         }), 500
 
 
+@products_bp.route('/products/search', methods=['GET'])
+def search_products():
+    """
+    Search products by SKU
+
+    Query Parameters:
+        - sku: SKU to search for (partial match supported)
+
+    Response:
+        {
+            "success": true,
+            "data": [...],
+            "count": 5
+        }
+    """
+    try:
+        # Get SKU query parameter
+        sku = request.args.get('sku')
+
+        if not sku:
+            return jsonify({
+                'success': False,
+                'error': 'Missing "sku" query parameter'
+            }), 400
+
+        # Build query with LIKE for partial matching
+        query = Product.query.options(
+            joinedload(Product.category_ref),
+            joinedload(Product.product_images)
+        ).filter(Product.sku.like(f'%{sku}%'))
+
+        # Get all matching products
+        products = query.order_by(Product.created_at.desc()).all()
+
+        # Convert products to dict with category details and images
+        products_data = [
+            product.to_dict(include_category_details=True, include_images=True)
+            for product in products
+        ]
+
+        return jsonify({
+            'success': True,
+            'data': products_data,
+            'count': len(products_data)
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @products_bp.route('/products', methods=['GET'])
 def get_products():
     """
