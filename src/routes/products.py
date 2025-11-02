@@ -208,7 +208,10 @@ def get_products():
 
     Query Parameters:
         - status: Filter by status (e.g., pending, approved, rejected)
-        - category_id: Filter by category ID
+        - category: Filter by category name
+        - excludeOutOfStock: Filter out products that are out of stock (true/false)
+        - minPrice: Filter products with price >= minPrice
+        - maxPrice: Filter products with price <= maxPrice
         - page: Page number (default: 1)
         - per_page: Items per page (default: 10)
 
@@ -227,7 +230,10 @@ def get_products():
     try:
         # Get query parameters
         status = request.args.get('status')
-        category_id = request.args.get('category_id', type=int)
+        category_name = request.args.get('category')
+        exclude_out_of_stock = request.args.get('excludeOutOfStock', 'false').lower() == 'true'
+        min_price = request.args.get('minPrice', type=float)
+        max_price = request.args.get('maxPrice', type=float)
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
 
@@ -240,8 +246,17 @@ def get_products():
         if status:
             query = query.filter_by(status=status)
 
-        if category_id:
-            query = query.filter_by(category_id=category_id)
+        if category_name:
+            query = query.join(Product.category_ref).filter(Category.name == category_name)
+
+        if exclude_out_of_stock:
+            query = query.filter_by(in_stock=True)
+
+        if min_price is not None:
+            query = query.filter(Product.price >= min_price)
+
+        if max_price is not None:
+            query = query.filter(Product.price <= max_price)
 
         # Paginate results
         pagination = query.order_by(Product.created_at.desc()).paginate(
