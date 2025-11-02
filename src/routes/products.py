@@ -72,6 +72,7 @@ def bulk_create_products():
                 price=validated_data['price'],
                 discount=validated_data['discount'],
                 gst=validated_data['gst'],
+                price_code=validated_data.get('price_code'),
                 status='pending'
             )
 
