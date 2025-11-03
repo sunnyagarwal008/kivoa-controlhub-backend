@@ -250,7 +250,7 @@ def get_products():
             query = query.join(Product.category_ref).filter(Category.name == category_name)
 
         if exclude_out_of_stock:
-            query = query.filter_by(in_stock=True)
+            query = query.filter(Product.in_stock == True)
 
         if min_price is not None:
             query = query.filter(Product.price >= min_price)
