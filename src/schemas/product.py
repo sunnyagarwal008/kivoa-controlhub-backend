@@ -35,6 +35,7 @@ class ProductSchema(Schema):
     category = fields.Str(required=True, validate=validate.Length(min=1, max=100))  # Input field
     category_details = fields.Nested(CategorySchema, dump_only=True)  # Full category object
     sku = fields.Str(dump_only=True)  # Auto-generated
+    sku_sequence_number = fields.Int(dump_only=True)  # Auto-generated from category sequence
     purchase_month = fields.Str(required=True, validate=validate.Length(equal=4))
     raw_image = fields.Str(required=True, validate=validate.Length(min=1, max=500))
     mrp = fields.Decimal(required=True, as_string=False, places=2)

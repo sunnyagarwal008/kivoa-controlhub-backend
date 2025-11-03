@@ -60,12 +60,13 @@ def bulk_create_products():
                 }), 400
 
             # Generate SKU for the product
-            sku = category.generate_sku(validated_data['purchase_month'])
+            sku, sequence_number = category.generate_sku(validated_data['purchase_month'])
 
             # Create new product with status set to 'pending'
             product = Product(
                 category_id=category.id,
                 sku=sku,
+                sku_sequence_number=sequence_number,
                 purchase_month=validated_data['purchase_month'],
                 raw_image=validated_data['raw_image'],
                 mrp=validated_data['mrp'],
@@ -375,8 +376,9 @@ def update_product(product_id):
             category = Category.query.get(new_category_id)
 
             # Generate new SKU
-            new_sku = category.generate_sku(new_purchase_month)
+            new_sku, sequence_number = category.generate_sku(new_purchase_month)
             product.sku = new_sku
+            product.sku_sequence_number = sequence_number
             product.category_id = new_category_id
             product.purchase_month = new_purchase_month
 

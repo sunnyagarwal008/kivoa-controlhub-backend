@@ -29,11 +29,12 @@ class Category(db.Model):
             purchase_month (str): Purchase month in MMYY format (e.g., '0124' for January 2024)
 
         Returns:
-            str: Generated SKU
+            tuple: (sku, sequence_number) - Generated SKU and the sequence number
         """
         self.sku_sequence_number += 1
         sequence = str(self.sku_sequence_number).zfill(4)
-        return f"{self.prefix}-{sequence}-{purchase_month}"
+        sku = f"{self.prefix}-{sequence}-{purchase_month}"
+        return sku, self.sku_sequence_number
 
     def to_dict(self):
         """Convert category object to dictionary"""
@@ -55,6 +56,7 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
     sku = db.Column(db.String(50), nullable=False, unique=True)
+    sku_sequence_number = db.Column(db.Integer, nullable=False)
     purchase_month = db.Column(db.String(4), nullable=False)
     raw_image = db.Column(db.String(500), nullable=False)
     mrp = db.Column(db.Numeric(10, 2), nullable=False)
@@ -86,6 +88,7 @@ class Product(db.Model):
             'category_id': self.category_id,
             'category': self.category_ref.name if self.category_ref else None,
             'sku': self.sku,
+            'sku_sequence_number': self.sku_sequence_number,
             'purchase_month': self.purchase_month,
             'raw_image': self.raw_image,
             'mrp': float(self.mrp),
