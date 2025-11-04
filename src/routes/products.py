@@ -205,7 +205,7 @@ def search_products():
 @products_bp.route('/products', methods=['GET'])
 def get_products():
     """
-    Get all products with optional filtering
+    Get all products with optional filtering and sorting
 
     Query Parameters:
         - status: Filter by status (e.g., pending, approved, rejected)
@@ -213,6 +213,8 @@ def get_products():
         - excludeOutOfStock: Filter out products that are out of stock (true/false)
         - minPrice: Filter products with price >= minPrice
         - maxPrice: Filter products with price <= maxPrice
+        - sortBy: Sort field (sku_sequence_number, price) (default: created_at)
+        - sortOrder: Sort order (asc, desc) (default: desc)
         - page: Page number (default: 1)
         - per_page: Items per page (default: 10)
 
@@ -235,8 +237,25 @@ def get_products():
         exclude_out_of_stock = request.args.get('excludeOutOfStock', 'false').lower() == 'true'
         min_price = request.args.get('minPrice', type=float)
         max_price = request.args.get('maxPrice', type=float)
+        sort_by = request.args.get('sortBy', 'created_at')
+        sort_order = request.args.get('sortOrder', 'desc').lower()
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
+
+        # Validate sort parameters
+        valid_sort_fields = ['sku_sequence_number', 'price', 'created_at']
+        if sort_by not in valid_sort_fields:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid sortBy parameter. Must be one of: {", ".join(valid_sort_fields)}'
+            }), 400
+
+        valid_sort_orders = ['asc', 'desc']
+        if sort_order not in valid_sort_orders:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid sortOrder parameter. Must be one of: {", ".join(valid_sort_orders)}'
+            }), 400
 
         # Build query with eager loading of category and images
         query = Product.query.options(
@@ -259,8 +278,15 @@ def get_products():
         if max_price is not None:
             query = query.filter(Product.price <= max_price)
 
+        # Apply sorting
+        sort_column = getattr(Product, sort_by)
+        if sort_order == 'asc':
+            query = query.order_by(sort_column.asc())
+        else:
+            query = query.order_by(sort_column.desc())
+
         # Paginate results
-        pagination = query.order_by(Product.created_at.desc()).paginate(
+        pagination = query.paginate(
             page=page,
             per_page=per_page,
             error_out=False
