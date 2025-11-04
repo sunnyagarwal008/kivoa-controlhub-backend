@@ -58,11 +58,15 @@ class WorkerThread(threading.Thread):
 
                 ai_images = gemini_service.generate_images(raw_image, category_name, ai_images_count)
                 created_image_urls = []
-                
+
                 # Generate enhanced images
                 bucket_name = current_app.config['S3_BUCKET_NAME']
-                for ai_image in ai_images:
-                    key = os.path.basename(ai_image)
+                for idx, ai_image in enumerate(ai_images, start=1):
+                    # Get file extension from the AI-generated image
+                    file_extension = os.path.splitext(ai_image)[1]
+
+                    # Create S3 key with format: product-images/<sku>-<index>
+                    key = f"product-images/{product.sku}-{idx}{file_extension}"
 
                     # Generate the S3 URL
                     image_url = s3_service.upload_file(ai_image, bucket_name=bucket_name, key=key)
