@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
 from sqlalchemy.orm import joinedload
+from collections import defaultdict
+import os
 from src.database import db
 from src.models import Category, Product, ProductImage
 from src.schemas import ProductSchema
-from src.services import sqs_service
+from src.services import sqs_service, pdf_service
 
 products_bp = Blueprint('products', __name__)
 
@@ -766,6 +768,90 @@ def update_product_stock(product_id):
 
     except Exception as e:
         db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@products_bp.route('/products/catalog', methods=['GET'])
+def generate_product_catalog():
+    """
+    Generate a PDF catalog of live, in-stock products and upload to S3
+
+    This endpoint:
+    1. Filters products that are both live (status='live') and in-stock (in_stock=True)
+    2. Groups products by category
+    3. Generates a PDF with:
+       - Cover page with dark green background and KIVOA branding
+       - Products organized by category
+       - 2-column grid layout
+       - Each product shows: SKU (as title) and first image only
+    4. Uploads the PDF to S3
+    5. Returns the public S3 URL
+
+    Response:
+        {
+            "success": true,
+            "message": "Catalog generated successfully",
+            "data": {
+                "catalog_url": "https://...",
+                "total_products": 50,
+                "categories": 5
+            }
+        }
+    """
+    try:
+        # Query all live and in-stock products with eager loading
+        products = Product.query.options(
+            joinedload(Product.category_ref),
+            joinedload(Product.product_images)
+        ).filter(
+            Product.status == 'live',
+            Product.in_stock == True
+        ).order_by(Product.category_id, Product.sku).all()
+
+        if not products:
+            return jsonify({
+                'success': False,
+                'error': 'No live, in-stock products found to generate catalog'
+            }), 404
+
+        # Group products by category
+        products_by_category = defaultdict(list)
+        for product in products:
+            category_name = product.category_ref.name if product.category_ref else 'Uncategorized'
+            products_by_category[category_name].append(product)
+
+        # Convert defaultdict to regular dict for better handling
+        products_by_category = dict(products_by_category)
+
+        current_app.logger.info(f"Generating catalog with {len(products)} products across {len(products_by_category)} categories")
+
+        # Generate PDF
+        pdf_path = pdf_service.generate_product_catalog(products_by_category)
+
+        # Upload to S3
+        catalog_url = pdf_service.upload_pdf_to_s3(pdf_path)
+
+        # Clean up temporary PDF file
+        try:
+            os.remove(pdf_path)
+        except Exception as e:
+            current_app.logger.warning(f"Failed to remove temporary PDF file: {str(e)}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Catalog generated successfully',
+            'data': {
+                'catalog_url': catalog_url,
+                'total_products': len(products),
+                'categories': len(products_by_category)
+            }
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error generating catalog: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

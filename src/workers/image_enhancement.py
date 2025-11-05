@@ -111,7 +111,6 @@ class WorkerThread(threading.Thread):
                     messages = sqs_service.receive_messages(max_messages=1, wait_time=20)
                     
                     if not messages:
-                        current_app.logger.debug("No messages received, continuing to poll...")
                         continue
                     
                     for message in messages:
