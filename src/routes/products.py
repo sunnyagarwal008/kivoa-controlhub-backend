@@ -479,7 +479,7 @@ def update_product(product_id):
         return jsonify({
             'success': True,
             'message': 'Product updated successfully',
-            'data': product_schema.dump(product)
+            'data': product.to_dict(include_category_details=True, include_images=True)
         }), 200
 
     except ValidationError as e:
