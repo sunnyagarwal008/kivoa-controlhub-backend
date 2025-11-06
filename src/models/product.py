@@ -11,6 +11,7 @@ class Category(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     prefix = db.Column(db.String(10), nullable=False, unique=True)
     sku_sequence_number = db.Column(db.Integer, nullable=False, default=0)
+    tags = db.Column(db.String(500), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -43,6 +44,7 @@ class Category(db.Model):
             'name': self.name,
             'prefix': self.prefix,
             'sku_sequence_number': self.sku_sequence_number,
+            'tags': self.tags,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

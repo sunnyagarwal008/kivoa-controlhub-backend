@@ -175,42 +175,6 @@ def bulk_create_products():
         }), 500
 
 
-@products_bp.route('/categories', methods=['GET'])
-def get_categories():
-    """
-    Get all categories
-
-    Response:
-        {
-            "success": true,
-            "data": [
-                {
-                    "id": 1,
-                    "name": "Electronics",
-                    "prefix": "ELEC",
-                    "sku_sequence_number": 5,
-                    "created_at": "...",
-                    "updated_at": "..."
-                },
-                ...
-            ]
-        }
-    """
-    try:
-        categories = Category.query.order_by(Category.name).all()
-
-        return jsonify({
-            'success': True,
-            'data': [category.to_dict() for category in categories]
-        }), 200
-
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
 @products_bp.route('/products/search', methods=['GET'])
 def search_products():
     """

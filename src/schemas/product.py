@@ -9,8 +9,25 @@ class CategorySchema(Schema):
     name = fields.Str(dump_only=True)
     prefix = fields.Str(dump_only=True)
     sku_sequence_number = fields.Int(dump_only=True)
+    tags = fields.Str(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+
+class CategoryCreateUpdateSchema(Schema):
+    """Schema for category create/update operations"""
+
+    name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    prefix = fields.Str(required=True, validate=validate.Length(min=1, max=10))
+    tags = fields.Str(required=False, allow_none=True, validate=validate.Length(max=500))
+
+    @validates('prefix')
+    def validate_prefix(self, value, **kwargs):
+        """Validate prefix contains only alphanumeric characters and no spaces"""
+        if not value.replace('-', '').replace('_', '').isalnum():
+            raise ValidationError('Prefix must contain only alphanumeric characters, hyphens, and underscores')
+        if ' ' in value:
+            raise ValidationError('Prefix cannot contain spaces')
 
 
 class ProductImageSchema(Schema):
