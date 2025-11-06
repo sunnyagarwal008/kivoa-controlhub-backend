@@ -20,6 +20,7 @@ class CategoryCreateUpdateSchema(Schema):
     name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
     prefix = fields.Str(required=True, validate=validate.Length(min=1, max=10))
     tags = fields.Str(required=False, allow_none=True, validate=validate.Length(max=500))
+    sku_sequence_number = fields.Int(dump_only=True)
 
     @validates('prefix')
     def validate_prefix(self, value, **kwargs):
