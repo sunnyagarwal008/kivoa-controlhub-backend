@@ -38,6 +38,7 @@ class ProductSchema(Schema):
     sku_sequence_number = fields.Int(dump_only=True)  # Auto-generated from category sequence
     purchase_month = fields.Str(required=True, validate=validate.Length(equal=4))
     raw_image = fields.Str(required=True, validate=validate.Length(min=1, max=500))
+    is_raw_image = fields.Bool(required=False, load_default=True)  # Flag to indicate if raw_image needs AI processing
     mrp = fields.Decimal(required=True, as_string=False, places=2)
     price = fields.Decimal(required=True, as_string=False, places=2)
     discount = fields.Decimal(required=True, as_string=False, places=2)
