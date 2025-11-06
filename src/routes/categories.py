@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
 from src.database import db
 from src.models import Category, Product
@@ -40,6 +40,7 @@ def get_categories():
         }), 200
 
     except Exception as e:
+        current_app.logger.error(f"Error fetching categories: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -109,6 +110,7 @@ def create_category():
         }), 201
 
     except ValidationError as e:
+        current_app.logger.warning(f"Validation error creating category: {e.messages}")
         return jsonify({
             'success': False,
             'error': 'Validation error',
@@ -117,6 +119,7 @@ def create_category():
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error creating category: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -187,6 +190,7 @@ def update_category(category_id):
         }), 200
 
     except ValidationError as e:
+        current_app.logger.warning(f"Validation error updating category {category_id}: {e.messages}")
         return jsonify({
             'success': False,
             'error': 'Validation error',
@@ -195,6 +199,7 @@ def update_category(category_id):
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error updating category {category_id}: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -235,6 +240,7 @@ def delete_category(category_id):
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error deleting category {category_id}: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

@@ -1,147 +1,406 @@
 {
   "info": {
-    "name": "Product Management API",
-    "description": "API collection for Product Management Backend",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "name": "KIVOA Product Management API",
+    "description": "Complete API collection for KIVOA Product Management Backend - includes Health, S3, Products, Categories, and Image Management endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
   },
   "item": [
     {
-      "name": "Health Check",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{base_url}}/api/health",
-          "host": ["{{base_url}}"],
-          "path": ["api", "health"]
-        },
-        "description": "Check if the API is running"
-      }
-    },
-    {
-      "name": "Generate Presigned URL",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n    \"filename\": \"product_image.jpg\",\n    \"content_type\": \"image/jpeg\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/presigned-url",
-          "host": ["{{base_url}}"],
-          "path": ["api", "presigned-url"]
-        },
-        "description": "Generate a presigned URL for uploading images to S3"
-      }
-    },
-    {
-      "name": "Bulk Create Products",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n    \"products\": [\n        {\n            \"category\": \"Electronics\",\n            \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid1.jpg\",\n            \"mrp\": 1000.00,\n            \"price\": 850.00,\n            \"discount\": 150.00,\n            \"gst\": 18.00\n        },\n        {\n            \"category\": \"Clothing\",\n            \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid2.jpg\",\n            \"mrp\": 500.00,\n            \"price\": 400.00,\n            \"discount\": 100.00,\n            \"gst\": 12.00\n        },\n        {\n            \"category\": \"Books\",\n            \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid3.jpg\",\n            \"mrp\": 300.00,\n            \"price\": 250.00,\n            \"discount\": 50.00,\n            \"gst\": 5.00\n        }\n    ]\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/products/bulk",
-          "host": ["{{base_url}}"],
-          "path": ["api", "products", "bulk"]
-        },
-        "description": "Create multiple products in a single request (max 100 products)"
-      }
-    },
-    {
-      "name": "Get All Products",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{base_url}}/api/products?page=1&per_page=10",
-          "host": ["{{base_url}}"],
-          "path": ["api", "products"],
-          "query": [
-            {
-              "key": "page",
-              "value": "1"
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
             },
-            {
-              "key": "per_page",
-              "value": "10"
-            },
-            {
-              "key": "status",
-              "value": "pending",
-              "disabled": true
-            },
-            {
-              "key": "category",
-              "value": "Electronics",
-              "disabled": true
-            }
-          ]
-        },
-        "description": "Get all products with optional filtering and pagination"
-      }
-    },
-    {
-      "name": "Get Product by ID",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{base_url}}/api/products/1",
-          "host": ["{{base_url}}"],
-          "path": ["api", "products", "1"]
-        },
-        "description": "Get a single product by ID"
-      }
-    },
-    {
-      "name": "Update Product",
-      "request": {
-        "method": "PUT",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
+            "description": "Check if the API is running"
           }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n    \"price\": 800.00,\n    \"discount\": 200.00,\n    \"status\": \"approved\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/products/1",
-          "host": ["{{base_url}}"],
-          "path": ["api", "products", "1"]
-        },
-        "description": "Update an existing product (partial updates allowed)"
-      }
+        }
+      ]
     },
     {
-      "name": "Delete Product",
-      "request": {
-        "method": "DELETE",
-        "header": [],
-        "url": {
-          "raw": "{{base_url}}/api/products/1",
-          "host": ["{{base_url}}"],
-          "path": ["api", "products", "1"]
+      "name": "S3",
+      "item": [
+        {
+          "name": "Generate Presigned URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"filename\": \"product_image.jpg\",\n    \"content_type\": \"image/jpeg\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/presigned-url",
+              "host": ["{{base_url}}"],
+              "path": ["api", "presigned-url"]
+            },
+            "description": "Generate a presigned URL for uploading images to S3. Supported content types: image/jpeg, image/jpg, image/png, image/gif, image/webp"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "categories"]
+            },
+            "description": "Get all categories ordered by name"
+          }
         },
-        "description": "Delete a product by ID"
-      }
+        {
+          "name": "Create Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Electronics\",\n    \"prefix\": \"ELEC\",\n    \"tags\": \"wireless,bluetooth,premium\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "categories"]
+            },
+            "description": "Create a new category. Name and prefix must be unique. Tags are optional comma-separated strings."
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Electronics Updated\",\n    \"tags\": \"wireless,bluetooth,premium,new\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/categories/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "categories", "1"]
+            },
+            "description": "Update an existing category. All fields are optional (partial update supported)."
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/categories/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "categories", "1"]
+            },
+            "description": "Delete a category. Cannot delete if it has associated products."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Bulk Create Products",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"products\": [\n        {\n            \"category\": \"Electronics\",\n            \"purchase_month\": \"0124\",\n            \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid1.jpg\",\n            \"mrp\": 1000.00,\n            \"price\": 850.00,\n            \"discount\": 150.00,\n            \"gst\": 18.00,\n            \"price_code\": \"ABC123\",\n            \"tags\": \"wireless,bluetooth\",\n            \"box_number\": 42,\n            \"is_raw_image\": true\n        },\n        {\n            \"category\": \"Clothing\",\n            \"purchase_month\": \"0124\",\n            \"raw_image\": \"https://your-bucket.s3.us-east-1.amazonaws.com/products/uuid2.jpg\",\n            \"mrp\": 500.00,\n            \"price\": 400.00,\n            \"discount\": 100.00,\n            \"gst\": 12.00,\n            \"is_raw_image\": false\n        }\n    ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "bulk"]
+            },
+            "description": "Create multiple products in a single request (max 100 products). If is_raw_image=true, product is queued for AI processing. If false, image is copied directly to S3 and product is marked as live."
+          }
+        },
+        {
+          "name": "Search Products by SKU",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/search?sku=ELEC",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "search"],
+              "query": [
+                {
+                  "key": "sku",
+                  "value": "ELEC",
+                  "description": "SKU to search for (partial match supported)"
+                }
+              ]
+            },
+            "description": "Search products by SKU with partial matching support"
+          }
+        },
+        {
+          "name": "Get All Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products?page=1&per_page=10&status=live&excludeOutOfStock=true&sortBy=created_at&sortOrder=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "per_page",
+                  "value": "10",
+                  "description": "Items per page (default: 10)"
+                },
+                {
+                  "key": "status",
+                  "value": "live",
+                  "description": "Filter by status (pending, live, rejected)",
+                  "disabled": true
+                },
+                {
+                  "key": "category",
+                  "value": "Electronics",
+                  "description": "Filter by category name",
+                  "disabled": true
+                },
+                {
+                  "key": "tags",
+                  "value": "wireless,bluetooth",
+                  "description": "Filter by tags (comma-separated)",
+                  "disabled": true
+                },
+                {
+                  "key": "excludeOutOfStock",
+                  "value": "true",
+                  "description": "Filter out out-of-stock products (true/false)",
+                  "disabled": true
+                },
+                {
+                  "key": "minPrice",
+                  "value": "100",
+                  "description": "Minimum price filter",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "1000",
+                  "description": "Maximum price filter",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "created_at",
+                  "description": "Sort field (sku_sequence_number, price, created_at)"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc",
+                  "description": "Sort order (asc, desc)"
+                }
+              ]
+            },
+            "description": "Get all products with optional filtering, sorting, and pagination"
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1"]
+            },
+            "description": "Get a single product by ID with category details and images"
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"category\": \"Electronics\",\n    \"purchase_month\": \"0124\",\n    \"raw_image\": \"https://...\",\n    \"mrp\": 1000.00,\n    \"price\": 800.00,\n    \"discount\": 200.00,\n    \"gst\": 18.00,\n    \"price_code\": \"ABC123\",\n    \"tags\": \"wireless,bluetooth,premium\",\n    \"box_number\": 42\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1"]
+            },
+            "description": "Update an existing product. All fields are optional (partial update supported). Changing category or purchase_month will regenerate the SKU."
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1"]
+            },
+            "description": "Delete a product by ID"
+          }
+        },
+        {
+          "name": "Update Product Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"live\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1", "status"]
+            },
+            "description": "Update product status. Valid values: live, rejected"
+          }
+        },
+        {
+          "name": "Update Product Stock",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"in_stock\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products/1/stock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1", "stock"]
+            },
+            "description": "Update product stock status. in_stock must be a boolean (true or false)"
+          }
+        },
+        {
+          "name": "Generate Product Catalog PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/catalog",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "catalog"]
+            },
+            "description": "Generate a PDF catalog of all live, in-stock products grouped by category and upload to S3. Returns the public S3 URL."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Product Images",
+      "item": [
+        {
+          "name": "Approve Product Image",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/1/images/1/approve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1", "images", "1", "approve"]
+            },
+            "description": "Approve a product image. Sets image status to 'approved'."
+          }
+        },
+        {
+          "name": "Reject Product Image",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/1/images/1/reject",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1", "images", "1", "reject"]
+            },
+            "description": "Reject a product image. Sets image status to 'rejected'."
+          }
+        },
+        {
+          "name": "Update Image Status (Generic)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"approved\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products/1/images/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1", "images", "1", "status"]
+            },
+            "description": "Update product image status. Valid values: pending, approved, rejected"
+          }
+        }
+      ]
     }
   ],
   "variable": [
