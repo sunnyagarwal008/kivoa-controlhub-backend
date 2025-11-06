@@ -135,7 +135,8 @@ def update_category(category_id):
         {
             "name": "Electronics",  // optional
             "prefix": "ELEC",  // optional
-            "tags": "tag1,tag2,tag3"  // optional, comma-separated strings
+            "tags": "tag1,tag2,tag3",  // optional, comma-separated strings
+            "sku_sequence_number": 10  // optional, must be >= 0
         }
 
     Response:
@@ -146,7 +147,7 @@ def update_category(category_id):
                 "id": 1,
                 "name": "Electronics",
                 "prefix": "ELEC",
-                "sku_sequence_number": 5,
+                "sku_sequence_number": 10,
                 "tags": "tag1,tag2,tag3",
                 "created_at": "...",
                 "updated_at": "..."
