@@ -394,17 +394,40 @@ def get_product(product_id):
 @products_bp.route('/products/<int:product_id>', methods=['PUT'])
 def update_product(product_id):
     """
-    Update a product
+    Update a product (partial update supported - send only fields you want to update)
 
-    Request Body:
+    Request Body (all fields optional):
         {
-            "category": "Electronics",
-            "purchase_month": "0124",
-            "price": 800.00,
-            ...
+            "category": "Electronics",           # Category name (will regenerate SKU if changed)
+            "purchase_month": "0124",            # MMYY format (will regenerate SKU if changed)
+            "raw_image": "https://...",          # S3 URL
+            "mrp": 1000.00,                      # Maximum Retail Price
+            "price": 800.00,                     # Selling Price
+            "discount": 200.00,                  # Discount amount
+            "gst": 18.00,                        # GST percentage
+            "price_code": "ABC123",              # Optional price code
+            "tags": "wireless,bluetooth,premium", # Comma-separated tags
+            "box_number": 42                     # Box number (integer)
         }
 
-    Note: SKU is auto-generated and cannot be updated directly.
+    Response:
+        {
+            "success": true,
+            "message": "Product updated successfully",
+            "data": {
+                "id": 1,
+                "category": "Electronics",
+                "sku": "ELEC-0001-0124",
+                "tags": "wireless,bluetooth,premium",
+                "box_number": 42,
+                ...
+            }
+        }
+
+    Note:
+        - SKU is auto-generated and cannot be updated directly
+        - Changing category or purchase_month will regenerate the SKU
+        - status and in_stock have dedicated endpoints
     """
     try:
         product = Product.query.get_or_404(product_id)
