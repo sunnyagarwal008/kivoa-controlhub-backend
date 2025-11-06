@@ -85,6 +85,8 @@ def bulk_create_products():
                 discount=validated_data['discount'],
                 gst=validated_data['gst'],
                 price_code=validated_data.get('price_code'),
+                tags=validated_data.get('tags'),
+                box_number=validated_data.get('box_number'),
                 status=status
             )
 
@@ -236,6 +238,7 @@ def get_products():
     Query Parameters:
         - status: Filter by status (e.g., pending, approved, rejected)
         - category: Filter by category name
+        - tags: Filter by tags (comma-separated, e.g., "wireless,bluetooth")
         - excludeOutOfStock: Filter out products that are out of stock (true/false)
         - minPrice: Filter products with price >= minPrice
         - maxPrice: Filter products with price <= maxPrice
@@ -260,6 +263,7 @@ def get_products():
         # Get query parameters
         status = request.args.get('status')
         category_name = request.args.get('category')
+        tags_param = request.args.get('tags')
         exclude_out_of_stock = request.args.get('excludeOutOfStock', 'false').lower() == 'true'
         min_price = request.args.get('minPrice', type=float)
         max_price = request.args.get('maxPrice', type=float)
@@ -294,6 +298,14 @@ def get_products():
 
         if category_name:
             query = query.join(Product.category_ref).filter(Category.name == category_name)
+
+        if tags_param:
+            # Split comma-separated tags and filter products that contain any of the tags
+            tags_list = [tag.strip() for tag in tags_param.split(',') if tag.strip()]
+            if tags_list:
+                # Build OR condition for each tag
+                tag_filters = [Product.tags.like(f'%{tag}%') for tag in tags_list]
+                query = query.filter(db.or_(*tag_filters))
 
         if exclude_out_of_stock:
             query = query.filter(Product.in_stock == True)

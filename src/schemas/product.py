@@ -61,6 +61,8 @@ class ProductSchema(Schema):
     discount = fields.Decimal(required=True, as_string=False, places=2)
     gst = fields.Decimal(required=True, as_string=False, places=2)
     price_code = fields.Str(required=False, allow_none=True, validate=validate.Length(max=20))
+    tags = fields.Str(required=False, allow_none=True, validate=validate.Length(max=500))
+    box_number = fields.Int(required=False, allow_none=True)
     status = fields.Str(dump_only=True)
     in_stock = fields.Bool(dump_only=True)
     images = fields.Nested(ProductImageSchema, many=True, dump_only=True)  # Product images
