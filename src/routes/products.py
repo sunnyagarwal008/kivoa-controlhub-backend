@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, contains_eager
 from collections import defaultdict
 import os
 from src.database import db
@@ -288,16 +288,20 @@ def get_products():
             }), 400
 
         # Build query with eager loading of category and images
-        query = Product.query.options(
-            joinedload(Product.category_ref),
-            joinedload(Product.product_images)
-        )
+        # If filtering by category, use join + contains_eager instead of joinedload
+        if category_name:
+            query = Product.query.join(Product.category_ref).options(
+                contains_eager(Product.category_ref),
+                joinedload(Product.product_images)
+            ).filter(Category.name == category_name)
+        else:
+            query = Product.query.options(
+                joinedload(Product.category_ref),
+                joinedload(Product.product_images)
+            )
 
         if status:
             query = query.filter_by(status=status)
-
-        if category_name:
-            query = query.filter(Product.category_ref.has(Category.name == category_name))
 
         if tags_param:
             # Split comma-separated tags and filter products that contain any of the tags
