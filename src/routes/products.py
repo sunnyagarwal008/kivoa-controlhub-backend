@@ -301,7 +301,7 @@ def get_products():
             )
 
         if status:
-            query = query.filter_by(status=status)
+            query = query.filter(Product.status == status)
 
         if tags_param:
             # Split comma-separated tags and filter products that contain any of the tags
