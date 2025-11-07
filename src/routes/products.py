@@ -297,7 +297,7 @@ def get_products():
             query = query.filter_by(status=status)
 
         if category_name:
-            query = query.join(Product.category_ref).filter(Category.name == category_name)
+            query = query.filter(Product.category_ref.has(Category.name == category_name))
 
         if tags_param:
             # Split comma-separated tags and filter products that contain any of the tags
@@ -500,7 +500,7 @@ def update_product(product_id):
 @products_bp.route('/products/<int:product_id>', methods=['DELETE'])
 def delete_product(product_id):
     """
-    Delete a product
+    Delete a product and its associated images from S3
 
     Response:
         {
@@ -509,14 +509,37 @@ def delete_product(product_id):
         }
     """
     try:
-        product = Product.query.get_or_404(product_id)
+        product = Product.query.options(
+            joinedload(Product.product_images)
+        ).get_or_404(product_id)
 
+        # Delete all product images from S3
+        deleted_images_count = 0
+        failed_images = []
+
+        for product_image in product.product_images:
+            try:
+                s3_service.delete_file(product_image.image_url)
+                deleted_images_count += 1
+                current_app.logger.info(f"Deleted image from S3: {product_image.image_url}")
+            except Exception as e:
+                # Log the error but continue deleting other images
+                current_app.logger.error(f"Failed to delete image {product_image.id} from S3: {str(e)}")
+                failed_images.append(product_image.id)
+
+        # Delete the product (cascade will delete ProductImage records)
         db.session.delete(product)
         db.session.commit()
 
+        message = f'Product deleted successfully'
+        if deleted_images_count > 0:
+            message += f' ({deleted_images_count} image(s) deleted from S3)'
+        if failed_images:
+            message += f' (Warning: Failed to delete {len(failed_images)} image(s) from S3)'
+
         return jsonify({
             'success': True,
-            'message': 'Product deleted successfully'
+            'message': message
         }), 200
 
     except Exception as e:

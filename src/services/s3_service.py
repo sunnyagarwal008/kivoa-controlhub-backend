@@ -93,10 +93,16 @@ class S3Service:
         """
         s3_client = self._get_s3_client()
         bucket_name = current_app.config['S3_BUCKET_NAME']
+        cdn_domain = current_app.config.get('CDN_DOMAIN')
 
         try:
-            # Extract key from URL
-            key = file_url.split(f"{bucket_name}.s3.{current_app.config['AWS_REGION']}.amazonaws.com/")[1]
+            # Extract key from URL - handle both CDN and S3 URLs
+            if cdn_domain and cdn_domain in file_url:
+                # CDN URL format: https://{cdn_domain}/{key}
+                key = file_url.split(f"{cdn_domain}/")[1]
+            else:
+                # S3 URL format: https://{bucket}.s3.{region}.amazonaws.com/{key}
+                key = file_url.split(f"{bucket_name}.s3.{current_app.config['AWS_REGION']}.amazonaws.com/")[1]
 
             s3_client.delete_object(Bucket=bucket_name, Key=key)
             current_app.logger.info(f"Deleted file from S3: {key}")
