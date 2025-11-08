@@ -1,4 +1,4 @@
-from src.schemas.product import ProductSchema, ProductImageSchema, CategorySchema, CategoryCreateUpdateSchema
+from src.schemas.product import ProductSchema, ProductImageSchema, CategorySchema, CategoryCreateUpdateSchema, RawImageSchema
 from src.schemas.s3 import PresignedUrlRequestSchema, PresignedUrlResponseSchema
 
 __all__ = [
@@ -6,6 +6,7 @@ __all__ = [
     'ProductImageSchema',
     'CategorySchema',
     'CategoryCreateUpdateSchema',
+    'RawImageSchema',
     'PresignedUrlRequestSchema',
     'PresignedUrlResponseSchema'
 ]

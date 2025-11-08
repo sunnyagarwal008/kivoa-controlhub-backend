@@ -96,3 +96,12 @@ class ProductSchema(Schema):
         if not re.match(r'^(0[1-9]|1[0-2])\d{2}$', value):
             raise ValidationError('purchase_month must be in MMYY format (e.g., 0124 for January 2024)')
 
+
+class RawImageSchema(Schema):
+    """Schema for raw image validation"""
+
+    id = fields.Int(dump_only=True)
+    image_url = fields.Str(required=True, validate=validate.Length(min=1, max=500))
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
+

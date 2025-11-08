@@ -145,3 +145,26 @@ class ProductImage(db.Model):
             'updated_at': self.updated_at.isoformat()
         }
 
+
+class RawImage(db.Model):
+    """Raw image model for storing raw image URLs"""
+
+    __tablename__ = 'raw_images'
+
+    id = db.Column(db.Integer, primary_key=True)
+    image_url = db.Column(db.String(500), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<RawImage {self.id} - {self.image_url}>'
+
+    def to_dict(self):
+        """Convert raw image object to dictionary"""
+        return {
+            'id': self.id,
+            'image_url': self.image_url,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+
