@@ -14,6 +14,91 @@ product_schema = ProductSchema()
 products_schema = ProductSchema(many=True)
 
 
+def _validate_sort_parameters(sort_by, sort_order):
+    """
+    Validate sort parameters
+
+    Args:
+        sort_by: Field to sort by
+        sort_order: Sort order - 'asc' or 'desc'
+
+    Returns:
+        tuple: (is_valid, error_message) - error_message is None if valid
+    """
+    valid_sort_fields = ['sku_sequence_number', 'price', 'created_at']
+    if sort_by not in valid_sort_fields:
+        return False, f'Invalid sortBy parameter. Must be one of: {", ".join(valid_sort_fields)}'
+
+    valid_sort_orders = ['asc', 'desc']
+    if sort_order not in valid_sort_orders:
+        return False, f'Invalid sortOrder parameter. Must be one of: {", ".join(valid_sort_orders)}'
+
+    return True, None
+
+
+def _build_products_query(status=None, category_name=None, tags_param=None,
+                         exclude_out_of_stock=False, min_price=None, max_price=None,
+                         sort_by='created_at', sort_order='desc'):
+    """
+    Build a SQLAlchemy query for products with filters and sorting
+
+    Args:
+        status: Filter by product status
+        category_name: Filter by category name
+        tags_param: Comma-separated tags to filter by
+        exclude_out_of_stock: Whether to exclude out of stock products
+        min_price: Minimum price filter
+        max_price: Maximum price filter
+        sort_by: Field to sort by (default: created_at)
+        sort_order: Sort order - 'asc' or 'desc' (default: desc)
+
+    Returns:
+        SQLAlchemy query object
+    """
+    # Build query with eager loading of category and images
+    # If filtering by category, use join + contains_eager instead of joinedload
+    if category_name:
+        query = Product.query.join(Product.category_ref).options(
+            contains_eager(Product.category_ref),
+            joinedload(Product.product_images)
+        ).filter(Category.name == category_name)
+    else:
+        query = Product.query.options(
+            joinedload(Product.category_ref),
+            joinedload(Product.product_images)
+        )
+
+    # Apply filters
+    if status:
+        query = query.filter(Product.status == status)
+
+    if tags_param:
+        # Split comma-separated tags and filter products that contain any of the tags
+        tags_list = [tag.strip() for tag in tags_param.split(',') if tag.strip()]
+        if tags_list:
+            # Build OR condition for each tag
+            tag_filters = [Product.tags.like(f'%{tag}%') for tag in tags_list]
+            query = query.filter(db.or_(*tag_filters))
+
+    if exclude_out_of_stock:
+        query = query.filter(Product.in_stock == True)
+
+    if min_price is not None:
+        query = query.filter(Product.price >= min_price)
+
+    if max_price is not None:
+        query = query.filter(Product.price <= max_price)
+
+    # Apply sorting
+    sort_column = getattr(Product, sort_by)
+    if sort_order == 'asc':
+        query = query.order_by(sort_column.asc())
+    else:
+        query = query.order_by(sort_column.desc())
+
+    return query
+
+
 @products_bp.route('/products/bulk', methods=['POST'])
 def bulk_create_products():
     try:
@@ -273,59 +358,24 @@ def get_products():
         per_page = request.args.get('per_page', 10, type=int)
 
         # Validate sort parameters
-        valid_sort_fields = ['sku_sequence_number', 'price', 'created_at']
-        if sort_by not in valid_sort_fields:
+        is_valid, error_message = _validate_sort_parameters(sort_by, sort_order)
+        if not is_valid:
             return jsonify({
                 'success': False,
-                'error': f'Invalid sortBy parameter. Must be one of: {", ".join(valid_sort_fields)}'
+                'error': error_message
             }), 400
 
-        valid_sort_orders = ['asc', 'desc']
-        if sort_order not in valid_sort_orders:
-            return jsonify({
-                'success': False,
-                'error': f'Invalid sortOrder parameter. Must be one of: {", ".join(valid_sort_orders)}'
-            }), 400
-
-        # Build query with eager loading of category and images
-        # If filtering by category, use join + contains_eager instead of joinedload
-        if category_name:
-            query = Product.query.join(Product.category_ref).options(
-                contains_eager(Product.category_ref),
-                joinedload(Product.product_images)
-            ).filter(Category.name == category_name)
-        else:
-            query = Product.query.options(
-                joinedload(Product.category_ref),
-                joinedload(Product.product_images)
-            )
-
-        if status:
-            query = query.filter(Product.status == status)
-
-        if tags_param:
-            # Split comma-separated tags and filter products that contain any of the tags
-            tags_list = [tag.strip() for tag in tags_param.split(',') if tag.strip()]
-            if tags_list:
-                # Build OR condition for each tag
-                tag_filters = [Product.tags.like(f'%{tag}%') for tag in tags_list]
-                query = query.filter(db.or_(*tag_filters))
-
-        if exclude_out_of_stock:
-            query = query.filter(Product.in_stock == True)
-
-        if min_price is not None:
-            query = query.filter(Product.price >= min_price)
-
-        if max_price is not None:
-            query = query.filter(Product.price <= max_price)
-
-        # Apply sorting
-        sort_column = getattr(Product, sort_by)
-        if sort_order == 'asc':
-            query = query.order_by(sort_column.asc())
-        else:
-            query = query.order_by(sort_column.desc())
+        # Build query using common method
+        query = _build_products_query(
+            status=status,
+            category_name=category_name,
+            tags_param=tags_param,
+            exclude_out_of_stock=exclude_out_of_stock,
+            min_price=min_price,
+            max_price=max_price,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
 
         # Paginate results
         pagination = query.paginate(
@@ -863,18 +913,29 @@ def update_product_stock(product_id):
 @products_bp.route('/products/catalog', methods=['GET'])
 def generate_product_catalog():
     """
-    Generate a PDF catalog of live, in-stock products and upload to S3
+    Generate a PDF catalog of filtered products and upload to S3
 
     This endpoint:
-    1. Filters products that are both live (status='live') and in-stock (in_stock=True)
-    2. Groups products by category
-    3. Generates a PDF with:
+    1. Accepts all filter parameters from get_products API (except pagination)
+    2. Filters products based on provided parameters
+    3. Groups products by category
+    4. Generates a PDF with:
        - Cover page with dark green background and KIVOA branding
        - Products organized by category
        - 2-column grid layout
        - Each product shows: SKU (as title) and first image only
-    4. Uploads the PDF to S3
-    5. Returns the public S3 URL
+    5. Uploads the PDF to S3
+    6. Returns the public S3 URL
+
+    Query Parameters:
+        - status: Filter by status (e.g., pending, live, rejected)
+        - category: Filter by category name
+        - tags: Filter by tags (comma-separated, e.g., "wireless,bluetooth")
+        - excludeOutOfStock: Filter out products that are out of stock (true/false)
+        - minPrice: Filter products with price >= minPrice
+        - maxPrice: Filter products with price <= maxPrice
+        - sortBy: Sort field (sku_sequence_number, price, created_at) (default: created_at)
+        - sortOrder: Sort order (asc, desc) (default: desc)
 
     Response:
         {
@@ -888,19 +949,43 @@ def generate_product_catalog():
         }
     """
     try:
-        # Query all live and in-stock products with eager loading
-        products = Product.query.options(
-            joinedload(Product.category_ref),
-            joinedload(Product.product_images)
-        ).filter(
-            Product.status == 'live',
-            Product.in_stock == True
-        ).order_by(Product.category_id, Product.sku).all()
+        # Get query parameters (same as get_products, excluding pagination)
+        status = request.args.get('status')
+        category_name = request.args.get('category')
+        tags_param = request.args.get('tags')
+        exclude_out_of_stock = request.args.get('excludeOutOfStock', 'false').lower() == 'true'
+        min_price = request.args.get('minPrice', type=float)
+        max_price = request.args.get('maxPrice', type=float)
+        sort_by = request.args.get('sortBy', 'created_at')
+        sort_order = request.args.get('sortOrder', 'desc').lower()
+
+        # Validate sort parameters
+        is_valid, error_message = _validate_sort_parameters(sort_by, sort_order)
+        if not is_valid:
+            return jsonify({
+                'success': False,
+                'error': error_message
+            }), 400
+
+        # Build query using common method
+        query = _build_products_query(
+            status=status,
+            category_name=category_name,
+            tags_param=tags_param,
+            exclude_out_of_stock=exclude_out_of_stock,
+            min_price=min_price,
+            max_price=max_price,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+
+        # Get all matching products (no pagination)
+        products = query.all()
 
         if not products:
             return jsonify({
                 'success': False,
-                'error': 'No live, in-stock products found to generate catalog'
+                'error': 'No products found matching the specified filters'
             }), 404
 
         # Group products by category
