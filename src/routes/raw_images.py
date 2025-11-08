@@ -3,6 +3,7 @@ from marshmallow import ValidationError
 from src.database import db
 from src.models import RawImage
 from src.schemas import RawImageSchema
+from src.services.s3_service import s3_service
 
 raw_images_bp = Blueprint('raw_images', __name__)
 
@@ -195,6 +196,125 @@ def bulk_create_raw_images():
             'error': 'Validation error',
             'details': e.messages
         }), 400
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+
+@raw_images_bp.route('/raw-images/bulk', methods=['DELETE'])
+def bulk_delete_raw_images():
+    """
+    Bulk delete raw images and remove them from S3
+
+    Request Body:
+        {
+            "ids": [1, 2, 3, 4, 5]
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Successfully deleted 5 raw images",
+            "data": {
+                "deleted": 5,
+                "total": 5,
+                "failed": 0,
+                "failed_ids": []
+            }
+        }
+    """
+    try:
+        request_data = request.get_json()
+
+        if not request_data or 'ids' not in request_data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing "ids" array in request body'
+            }), 400
+
+        raw_image_ids = request_data['ids']
+
+        if not isinstance(raw_image_ids, list):
+            return jsonify({
+                'success': False,
+                'error': '"ids" must be an array'
+            }), 400
+
+        if len(raw_image_ids) == 0:
+            return jsonify({
+                'success': False,
+                'error': '"ids" array cannot be empty'
+            }), 400
+
+        if len(raw_image_ids) > 1000:
+            return jsonify({
+                'success': False,
+                'error': 'Maximum 1000 raw images allowed per bulk delete'
+            }), 400
+
+        # Validate all IDs are integers
+        if not all(isinstance(id, int) for id in raw_image_ids):
+            return jsonify({
+                'success': False,
+                'error': 'All IDs must be integers'
+            }), 400
+
+        # Fetch all raw images to delete
+        raw_images = RawImage.query.filter(RawImage.id.in_(raw_image_ids)).all()
+
+        if not raw_images:
+            return jsonify({
+                'success': False,
+                'error': 'No raw images found with the provided IDs'
+            }), 404
+
+        deleted_count = 0
+        failed_count = 0
+        failed_ids = []
+
+        for raw_image in raw_images:
+            try:
+                # Delete from S3 if the image_url is an S3 URL
+                if raw_image.image_url:
+                    try:
+                        s3_service.delete_file(raw_image.image_url)
+                    except Exception as s3_error:
+                        # Log S3 deletion error but continue with database deletion
+                        # This handles cases where the file might not exist in S3
+                        pass
+
+                # Delete from database
+                db.session.delete(raw_image)
+                deleted_count += 1
+
+            except Exception as e:
+                failed_count += 1
+                failed_ids.append(raw_image.id)
+                db.session.rollback()
+                continue
+
+        # Commit all deletions
+        db.session.commit()
+
+        message = f'Successfully deleted {deleted_count} raw images'
+        if failed_count > 0:
+            message += f' ({failed_count} failed)'
+
+        return jsonify({
+            'success': True,
+            'message': message,
+            'data': {
+                'deleted': deleted_count,
+                'total': len(raw_image_ids),
+                'failed': failed_count,
+                'failed_ids': failed_ids
+            }
+        }), 200
 
     except Exception as e:
         db.session.rollback()
