@@ -10,6 +10,89 @@ raw_image_schema = RawImageSchema()
 raw_images_schema = RawImageSchema(many=True)
 
 
+@raw_images_bp.route('/raw-images', methods=['GET'])
+def get_raw_images():
+    """
+    Get all raw images with pagination and sorting
+
+    Query Parameters:
+        - sortBy: Sort field (id, created_at) (default: created_at)
+        - sortOrder: Sort order (asc, desc) (default: desc)
+        - page: Page number (default: 1)
+        - per_page: Items per page (default: 10)
+
+    Response:
+        {
+            "success": true,
+            "data": [...],
+            "pagination": {
+                "page": 1,
+                "per_page": 10,
+                "total": 100,
+                "pages": 10
+            }
+        }
+    """
+    try:
+        # Get query parameters
+        sort_by = request.args.get('sortBy', 'created_at')
+        sort_order = request.args.get('sortOrder', 'desc').lower()
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+
+        # Validate sort parameters
+        valid_sort_fields = ['id', 'created_at']
+        if sort_by not in valid_sort_fields:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid sortBy parameter. Must be one of: {", ".join(valid_sort_fields)}'
+            }), 400
+
+        valid_sort_orders = ['asc', 'desc']
+        if sort_order not in valid_sort_orders:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid sortOrder parameter. Must be one of: {", ".join(valid_sort_orders)}'
+            }), 400
+
+        # Build query
+        query = RawImage.query
+
+        # Apply sorting
+        sort_column = getattr(RawImage, sort_by)
+        if sort_order == 'asc':
+            query = query.order_by(sort_column.asc())
+        else:
+            query = query.order_by(sort_column.desc())
+
+        # Paginate results
+        pagination = query.paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
+
+        # Convert raw images to dict
+        raw_images_data = [raw_image_schema.dump(raw_image) for raw_image in pagination.items]
+
+        return jsonify({
+            'success': True,
+            'data': raw_images_data,
+            'pagination': {
+                'page': pagination.page,
+                'per_page': pagination.per_page,
+                'total': pagination.total,
+                'pages': pagination.pages
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @raw_images_bp.route('/raw-images/bulk', methods=['POST'])
 def bulk_create_raw_images():
     """

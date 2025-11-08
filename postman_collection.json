@@ -401,6 +401,68 @@
           }
         }
       ]
+    },
+    {
+      "name": "Raw Images",
+      "item": [
+        {
+          "name": "Get All Raw Images",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/raw-images?page=1&per_page=10&sortBy=created_at&sortOrder=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "raw-images"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "per_page",
+                  "value": "10",
+                  "description": "Items per page (default: 10)"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "created_at",
+                  "description": "Sort field (id, created_at)"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc",
+                  "description": "Sort order (asc, desc)"
+                }
+              ]
+            },
+            "description": "Get all raw images with pagination and sorting support"
+          }
+        },
+        {
+          "name": "Bulk Create Raw Images",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"raw_images\": [\n        {\n            \"image_url\": \"https://example.com/image1.jpg\"\n        },\n        {\n            \"image_url\": \"https://example.com/image2.jpg\"\n        },\n        {\n            \"image_url\": \"https://example.com/image3.jpg\"\n        }\n    ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/raw-images/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "raw-images", "bulk"]
+            },
+            "description": "Bulk create raw images (max 1000 per request). Duplicate URLs are automatically skipped."
+          }
+        }
+      ]
     }
   ],
   "variable": [
