@@ -473,7 +473,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/prompts?page=1&per_page=20&sortBy=created_at&sortOrder=desc",
+              "raw": "{{base_url}}/api/prompts?sortBy=created_at&sortOrder=desc",
               "host": ["{{base_url}}"],
               "path": ["api", "prompts"],
               "query": [
@@ -508,16 +508,6 @@
                   "disabled": true
                 },
                 {
-                  "key": "page",
-                  "value": "1",
-                  "description": "Page number (default: 1)"
-                },
-                {
-                  "key": "per_page",
-                  "value": "20",
-                  "description": "Items per page (default: 20, max: 100)"
-                },
-                {
                   "key": "sortBy",
                   "value": "created_at",
                   "description": "Sort field (id, category_id, type, created_at, updated_at)"
@@ -529,7 +519,7 @@
                 }
               ]
             },
-            "description": "Get all prompts with optional filtering, sorting, and pagination. Supports filtering by category name, category_id, type, is_active, and tags."
+            "description": "Get all prompts with optional filtering and sorting. Supports filtering by category name, category_id, type, is_active, and tags."
           }
         },
         {

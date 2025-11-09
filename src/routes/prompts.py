@@ -17,7 +17,7 @@ prompt_filter_schema = PromptFilterSchema()
 @prompts_bp.route('/prompts', methods=['GET'])
 def get_prompts():
     """
-    Get all prompts with optional filtering, sorting, and pagination
+    Get all prompts with optional filtering and sorting
 
     Query Parameters:
         - category: Filter by category name (e.g., 'necklace', 'ring', 'earring')
@@ -27,19 +27,12 @@ def get_prompts():
         - tags: Filter by tags (comma-separated)
         - sortBy: Sort field (id, category_id, type, created_at) (default: created_at)
         - sortOrder: Sort order (asc, desc) (default: desc)
-        - page: Page number (default: 1)
-        - per_page: Items per page (default: 20)
 
     Response:
         {
             "success": true,
             "data": [...],
-            "pagination": {
-                "page": 1,
-                "per_page": 20,
-                "total": 50,
-                "pages": 3
-            }
+            "total": 50
         }
     """
     try:
@@ -85,24 +78,13 @@ def get_prompts():
         else:
             query = query.order_by(getattr(Prompt, sort_by).desc())
 
-        # Pagination
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-
-        # Limit per_page to reasonable values
-        per_page = min(per_page, 100)
-
-        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        # Get all results
+        prompts = query.all()
 
         return jsonify({
             'success': True,
-            'data': [prompt.to_dict() for prompt in pagination.items],
-            'pagination': {
-                'page': pagination.page,
-                'per_page': pagination.per_page,
-                'total': pagination.total,
-                'pages': pagination.pages
-            }
+            'data': [prompt.to_dict() for prompt in prompts],
+            'total': len(prompts)
         }), 200
 
     except Exception as e:
