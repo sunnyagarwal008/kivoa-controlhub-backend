@@ -463,6 +463,289 @@
           }
         }
       ]
+    },
+    {
+      "name": "Prompts",
+      "item": [
+        {
+          "name": "Get All Prompts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/prompts?page=1&per_page=20&sortBy=created_at&sortOrder=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "necklace",
+                  "description": "Filter by category name (e.g., necklace, ring, earring)",
+                  "disabled": true
+                },
+                {
+                  "key": "category_id",
+                  "value": "1",
+                  "description": "Filter by category ID",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "model_hand",
+                  "description": "Filter by type (e.g., model_hand, satin, mirror)",
+                  "disabled": true
+                },
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "description": "Filter by active status (true/false)",
+                  "disabled": true
+                },
+                {
+                  "key": "tags",
+                  "value": "fashion,luxury",
+                  "description": "Filter by tags (comma-separated)",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "per_page",
+                  "value": "20",
+                  "description": "Items per page (default: 20, max: 100)"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "created_at",
+                  "description": "Sort field (id, category_id, type, created_at, updated_at)"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc",
+                  "description": "Sort order (asc, desc)"
+                }
+              ]
+            },
+            "description": "Get all prompts with optional filtering, sorting, and pagination. Supports filtering by category name, category_id, type, is_active, and tags."
+          }
+        },
+        {
+          "name": "Get Prompts by Category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/prompts?category=necklace&is_active=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "necklace",
+                  "description": "Filter by category name"
+                },
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "description": "Only active prompts"
+                }
+              ]
+            },
+            "description": "Get all prompts for a specific category (e.g., necklace, ring, earring)"
+          }
+        },
+        {
+          "name": "Get Ring Prompts by Type",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/prompts?category=ring&type=model_hand&is_active=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "ring",
+                  "description": "Filter by category"
+                },
+                {
+                  "key": "type",
+                  "value": "model_hand",
+                  "description": "Filter by type (model_hand, satin, mirror)"
+                },
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "description": "Only active prompts"
+                }
+              ]
+            },
+            "description": "Get ring prompts filtered by type (model_hand, satin, or mirror)"
+          }
+        },
+        {
+          "name": "Get Single Prompt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/prompts/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts", "1"]
+            },
+            "description": "Get a single prompt by ID. Returns prompt with category details."
+          }
+        },
+        {
+          "name": "Create Prompt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"text\": \"A high-resolution fashion photography portrait of a stunning female model wearing a necklace...\",\n    \"category\": \"necklace\",\n    \"type\": null,\n    \"tags\": \"fashion,luxury,editorial\",\n    \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/prompts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts"]
+            },
+            "description": "Create a new prompt. Category must exist in the categories table. Type and tags are optional."
+          }
+        },
+        {
+          "name": "Create Ring Prompt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"text\": \"A close-up of a model's hand wearing a luxury ring...\",\n    \"category\": \"ring\",\n    \"type\": \"model_hand\",\n    \"tags\": \"ring,model,hand,luxury\",\n    \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/prompts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts"]
+            },
+            "description": "Create a ring prompt with type (model_hand, satin, or mirror)"
+          }
+        },
+        {
+          "name": "Update Prompt",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"text\": \"Updated prompt text...\",\n    \"is_active\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/prompts/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts", "1"]
+            },
+            "description": "Update an existing prompt. All fields are optional. Can update text, category, type, tags, or is_active status."
+          }
+        },
+        {
+          "name": "Update Prompt Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"category\": \"earring\",\n    \"type\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/prompts/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts", "1"]
+            },
+            "description": "Update prompt category and type. Category must exist in the categories table."
+          }
+        },
+        {
+          "name": "Disable Prompt",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"is_active\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/prompts/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts", "1"]
+            },
+            "description": "Disable a prompt without deleting it. Set is_active to false."
+          }
+        },
+        {
+          "name": "Delete Prompt",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/prompts/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts", "1"]
+            },
+            "description": "Permanently delete a prompt by ID"
+          }
+        },
+        {
+          "name": "Bulk Create Prompts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"prompts\": [\n        {\n            \"text\": \"Necklace prompt 1...\",\n            \"category\": \"necklace\",\n            \"tags\": \"fashion,luxury\"\n        },\n        {\n            \"text\": \"Ring prompt on model hand...\",\n            \"category\": \"ring\",\n            \"type\": \"model_hand\",\n            \"tags\": \"ring,model,luxury\"\n        },\n        {\n            \"text\": \"Ring prompt on satin...\",\n            \"category\": \"ring\",\n            \"type\": \"satin\",\n            \"tags\": \"ring,satin,luxury\"\n        }\n    ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/prompts/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "prompts", "bulk"]
+            },
+            "description": "Bulk create prompts (max 1000 per request). All categories must exist in the categories table."
+          }
+        }
+      ]
     }
   ],
   "variable": [

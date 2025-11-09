@@ -1,87 +1,130 @@
 """
-Transformation Prompts for Image Transformer
+Transformation Prompts Service
 
-This file contains all the transformation prompts organized by categories.
-You can easily add, modify, or remove prompts here.
+This service fetches prompts from the database.
+Prompts are organized by category and type.
 """
 
-# Nature and landscape prompts
-NECKLACE_PROMPTS = [
-    "A high-resolution fashion photography portrait of a stunning female model in traditional saree with subtle makeup and natural looking hair, royal background, rich cultural elegance, natural expressions wearing attached jewellery. The model looks elegant, lively, and expressive with a natural smile, styled in a modern luxurious outfit. Classy indoor studio lighting with cinematic depth of field. The jewellery is the focus — detailed, sharp, and sparkling, captured with professional DSLR camera quality. Editorial, Vogue-style, rich colors, realistic skin texture, natural expressions, no artificial look, cinematic light.",
-    "A high-resolution fashion photography portrait of a stunning female Indian model in a modern luxurious outfit, styled with  attached jewellery. She has subtle makeup, glossy natural skin, and effortlessly styled hair. The setting is chic and contemporary. The model looks lively, confident, and expressive with natural candid expressions. Editorial Vogue-style, captured with professional DSLR quality, 85mm lens, cinematic depth of field. The jewellery is the hero — sharp, detailed, and sparkling. Rich tones, modern elegance, realistic skin texture, natural expressions, no artificial look, cinematic lighting.",
-    "A high-resolution fashion photography portrait of a stunning female Indian model with natural black hair in a traditional dress, styled with attached jewellery. The earring size is medium, not too big. She has subtle makeup, glossy natural skin, and effortlessly styled hair. The setting is chic and contemporary. The model looks lively, confident, and expressive with natural candid expressions. Editorial Vogue-style, captured with professional DSLR quality, 85mm lens, cinematic depth of field. The jewellery is the hero — sharp, detailed, and sparkling. Rich tones, modern elegance, realistic skin texture, natural expressions, no artificial look, cinematic lighting. Full light and focus on necklace. Make it stand out",
-    "A high-resolution studio product photograph of uploaded jewellery displayed on a model with neutral expressions. Clean plain background (white or light beige), soft professional studio lighting, minimal shadows, jewellery centered and in focus. The model is styled simply with natural makeup and neat hair to avoid distractions. The jewellery is the hero — sharp, detailed, and sparkling, captured with DSLR quality and catalogue-style clarity. Realistic skin tones, no artificial look, minimalistic composition. Full light and focus on necklace. Make it stand out. Female model should be real looking Indian woman with real expressions.",
-    "Jewellery displayed against a blurred artistic background royal architecture. Soft golden lighting, warm tones, jewellery glowing and catching the light.",
-    "Elegant flat lay photo of jewellery placed on velvet or silk fabric, minimal props (jewellery box, soft flowers). Overhead shot, soft golden lighting, luxurious catalogue look.",
-    "A high-end lifestyle photoshoot of a real, natural-looking female model with real hair wearing a [type of jewellery, e.g., pearl choker necklace], in a soft indoor setting with warm ambient lighting, professional makeup, neutral-toned outfit (e.g., linen shirt or evening dress), natural pose, soft smile or candid expression, editorial photography style, soft bokeh background, emphasis on the jewellery, classy and elegant, realistic skin texture, cinematic lighting. Remember Don't change the input jewellery in any way.",
-    "A professional studio photoshoot of an elegant attached jewellery, displayed on a neutral-toned velvet display stand, isolated on a soft beige or gradient white background, soft diffused lighting with sharp focus on the jewellery details, high resolution, reflections and shadows for realism, minimal background distractions, commercial product photography style, luxurious and classy mood. Remember Don't change the input jewellery in any way."
-]
+from flask import current_app
+from sqlalchemy.orm import joinedload
+from src.models.prompt import Prompt
+from src.models.product import Category
 
-# Urban and architectural prompts
-RING_PROMPTS_MODEL_HAND = [
-    "Editorial close-up: A North Indian model wearing a ring, focus on the jewellery with luxury tones, satin and stone textures softly behind. Focus on the ring and blur the background. Do not change the input ring in any way."
-    "A North Indian jewellery model showcasing a ring, focus on her hand and ring, blurred satin and perfume props in the background. Focus on the ring and blur the background. Do not change the input ring in any way.",
-    "A close-up of a North Indian woman’s hand wearing a luxury ring, soft satin cloth in the background. Focus on the ring and blur the background. Do not change the input ring in any way.",
-]
 
-RING_PROMPTS_SATIN = [
-    "Artistic focus shot of a ring placed on satin cloth, surrounded by scattered gemstones and a luxury perfume bottle in background. Focus on the ring and blur the background. Do not change the input ring in any way.",
-    "Minimalist product shot of a ring placed on satin, a single luxury perfume bottle and polished stone as accent prop in the background. Focus on the ring and blur the background. Do not change the input ring in any way.",
-]
-
-RING_PROMPTS_MIRROR = [
-    "A standing mirror reflecting a ring placed in front, luxury styling with satin drapes and perfume bottles blurred in the background. Focus on the ring and blur the background. Do not change the input ring in any way.",
-    "Macro shot of a ring resting on a polished stone surface, soft reflections from a nearby mirror, luxury editorial feel. Focus on the ring and blur the background. Do not change the input ring in any way.",
-    "A standing mirror reflecting a ring placed in front, luxury styling with satin drapes and perfume bottles blurred in the background. Focus on the ring and blur the background. Do not change the input ring in any way.",
-]
-
-EARRING_PROMPTS = [
-    "Artistic focus shot of earrings placed on satin cloth, surrounded by scattered gemstones and a luxury perfume bottle in background. Focus on the earrings and blur the background. Do not change the input earrings in any way.",
-]
-
-DEFAULT_PROMPTS = [
-    ""
-    ]
-
-# All prompt categories for easy access
-ALL_PROMPT_CATEGORIES = {
-    'necklace': [NECKLACE_PROMPTS],
-    'ring': [RING_PROMPTS_MODEL_HAND, RING_PROMPTS_SATIN, RING_PROMPTS_MIRROR],
-    'earring': [EARRING_PROMPTS],
-    'default' : [DEFAULT_PROMPTS],
-}
-
-def get_prompts_by_category(category: str):
+def get_prompts_by_category(category: str, prompt_type: str = None):
     """
-    Get prompts by category
-    
+    Get prompts by category and optionally by type from database
+
     Args:
-        category: Category name ('default', 'nature', 'urban', etc.)
-        
+        category: Category name ('necklace', 'ring', 'earring', 'default', etc.)
+        prompt_type: Optional type filter (e.g., 'model_hand', 'satin', 'mirror' for rings)
+
     Returns:
-        List of prompts for the specified category
+        List of lists of prompt texts grouped by type for the specified category
+        For backward compatibility with existing code that expects nested lists
     """
-    return ALL_PROMPT_CATEGORIES.get(category.lower())
+    try:
+        # Look up category by name
+        category_obj = Category.query.filter_by(name=category.lower()).first()
+        if not category_obj:
+            current_app.logger.warning(f"Category not found: {category}")
+            return [[""]]  # Return empty prompt for backward compatibility
+
+        # Query active prompts for the category
+        query = Prompt.query.filter(
+            Prompt.category_id == category_obj.id,
+            Prompt.is_active == True
+        )
+
+        # If specific type requested, filter by type
+        if prompt_type:
+            query = query.filter(Prompt.type == prompt_type)
+
+        prompts = query.all()
+
+        if not prompts:
+            current_app.logger.warning(f"No prompts found for category: {category}, type: {prompt_type}")
+            return [[""]]  # Return empty prompt for backward compatibility
+
+        # Group prompts by type for backward compatibility
+        # This maintains the structure expected by existing code
+        prompts_by_type = {}
+        for prompt in prompts:
+            type_key = prompt.type if prompt.type else 'default'
+            if type_key not in prompts_by_type:
+                prompts_by_type[type_key] = []
+            prompts_by_type[type_key].append(prompt.text)
+
+        # Return as list of lists
+        return list(prompts_by_type.values())
+
+    except Exception as e:
+        current_app.logger.error(f"Error fetching prompts for category {category}: {str(e)}")
+        # Return empty prompt as fallback
+        return [[""]]
 
 
 def get_all_prompts():
     """
-    Get all prompts from all categories combined
+    Get all active prompts from database
     
     Returns:
-        List of all available prompts
+        List of all available prompt texts
     """
-    all_prompts = []
-    for prompts in ALL_PROMPT_CATEGORIES.values():
-        all_prompts.extend(prompts)
-    return all_prompts
+    try:
+        prompts = Prompt.query.filter(Prompt.is_active == True).all()
+        return [prompt.text for prompt in prompts]
+    except Exception as e:
+        current_app.logger.error(f"Error fetching all prompts: {str(e)}")
+        return [""]
 
 
 def get_available_categories():
     """
-    Get list of available prompt categories
-    
+    Get list of available prompt categories from database
+
     Returns:
-        List of category names
+        List of unique category names
     """
-    return list(ALL_PROMPT_CATEGORIES.keys())
+    try:
+        # Get categories that have prompts
+        categories = Category.query.join(Prompt).distinct().all()
+        return [category.name for category in categories]
+    except Exception as e:
+        current_app.logger.error(f"Error fetching categories: {str(e)}")
+        return ['default']
+
+
+def get_prompts_flat(category: str, prompt_type: str = None):
+    """
+    Get prompts as a flat list (new simplified interface)
+
+    Args:
+        category: Category name ('necklace', 'ring', 'earring', 'default', etc.)
+        prompt_type: Optional type filter (e.g., 'model_hand', 'satin', 'mirror' for rings)
+
+    Returns:
+        List of prompt texts
+    """
+    try:
+        # Look up category by name
+        category_obj = Category.query.filter_by(name=category.lower()).first()
+        if not category_obj:
+            current_app.logger.warning(f"Category not found: {category}")
+            return [""]
+
+        query = Prompt.query.filter(
+            Prompt.category_id == category_obj.id,
+            Prompt.is_active == True
+        )
+
+        if prompt_type:
+            query = query.filter(Prompt.type == prompt_type)
+
+        prompts = query.all()
+        return [prompt.text for prompt in prompts] if prompts else [""]
+
+    except Exception as e:
+        current_app.logger.error(f"Error fetching prompts: {str(e)}")
+        return [""]
+
