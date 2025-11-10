@@ -1038,9 +1038,11 @@ def generate_product_image(product_id):
     """
     Generate a new product image for a product using AI
 
-    Query Parameters:
-        - prompt_type: Optional type filter for prompts (e.g., 'model_hand', 'satin', 'mirror')
-        - prompt_text: Optional custom prompt text. If provided, this will be used instead of DB prompts
+    Request Body:
+        {
+            "prompt_type": "model_hand",  # Optional type filter for prompts (e.g., 'model_hand', 'satin', 'mirror')
+            "prompt_text": "custom prompt"  # Optional custom prompt text. If provided, this will be used instead of DB prompts
+        }
 
     Response:
         {
@@ -1063,9 +1065,10 @@ def generate_product_image(product_id):
             joinedload(Product.product_images)
         ).get_or_404(product_id)
 
-        # Get query parameters
-        prompt_type = request.args.get('prompt_type')
-        prompt_text = request.args.get('prompt_text')
+        # Get request body
+        data = request.get_json() or {}
+        prompt_type = data.get('prompt_type')
+        prompt_text = data.get('prompt_text')
 
         # Determine which prompt to use
         if prompt_text:
