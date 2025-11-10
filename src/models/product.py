@@ -112,9 +112,10 @@ class Product(db.Model):
         if include_category_details and self.category_ref:
             result['category_details'] = self.category_ref.to_dict()
 
-        # Include product images if requested
+        # Include product images if requested, sorted by priority (lower number = higher priority)
         if include_images:
-            result['images'] = [img.to_dict() for img in self.product_images]
+            sorted_images = sorted(self.product_images, key=lambda img: img.priority)
+            result['images'] = [img.to_dict() for img in sorted_images]
 
         return result
 
@@ -128,6 +129,7 @@ class ProductImage(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     image_url = db.Column(db.String(500), nullable=False)
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending, approved, rejected
+    priority = db.Column(db.Integer, nullable=False, default=0)  # Lower number = higher priority
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -141,6 +143,7 @@ class ProductImage(db.Model):
             'product_id': self.product_id,
             'image_url': self.image_url,
             'status': self.status,
+            'priority': self.priority,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

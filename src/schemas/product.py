@@ -38,6 +38,7 @@ class ProductImageSchema(Schema):
     product_id = fields.Int(required=True)
     image_url = fields.Str(required=True, validate=validate.Length(min=1, max=500))
     status = fields.Str(dump_only=True)
+    priority = fields.Int(required=False, load_default=0)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 

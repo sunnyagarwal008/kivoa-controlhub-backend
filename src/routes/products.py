@@ -1190,3 +1190,122 @@ def generate_product_image(product_id):
             'success': False,
             'error': str(e)
         }), 500
+
+
+@products_bp.route('/products/<int:product_id>/images/update-priorities', methods=['PUT'])
+def update_product_image_priorities(product_id):
+    """
+    Update priorities for multiple product images
+
+    Request Body:
+        {
+            "priorities": [
+                {"image_id": 1, "priority": 0},
+                {"image_id": 2, "priority": 1},
+                {"image_id": 3, "priority": 2}
+            ]
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Updated priorities for 3 images",
+            "data": [
+                {
+                    "id": 1,
+                    "product_id": 1,
+                    "image_url": "https://...",
+                    "status": "approved",
+                    "priority": 0,
+                    "created_at": "...",
+                    "updated_at": "..."
+                },
+                ...
+            ]
+        }
+    """
+    try:
+        # Get product and verify it exists
+        product = Product.query.get_or_404(product_id)
+
+        # Get request body
+        data = request.get_json()
+        if not data or 'priorities' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required field: priorities'
+            }), 400
+
+        priorities = data['priorities']
+        if not isinstance(priorities, list):
+            return jsonify({
+                'success': False,
+                'error': 'priorities must be an array'
+            }), 400
+
+        if not priorities:
+            return jsonify({
+                'success': False,
+                'error': 'priorities array cannot be empty'
+            }), 400
+
+        # Validate each priority entry
+        for entry in priorities:
+            if not isinstance(entry, dict):
+                return jsonify({
+                    'success': False,
+                    'error': 'Each priority entry must be an object with image_id and priority'
+                }), 400
+
+            if 'image_id' not in entry or 'priority' not in entry:
+                return jsonify({
+                    'success': False,
+                    'error': 'Each priority entry must have image_id and priority fields'
+                }), 400
+
+            if not isinstance(entry['image_id'], int) or not isinstance(entry['priority'], int):
+                return jsonify({
+                    'success': False,
+                    'error': 'image_id and priority must be integers'
+                }), 400
+
+        # Update priorities
+        updated_images = []
+        for entry in priorities:
+            image_id = entry['image_id']
+            priority = entry['priority']
+
+            # Get the image and verify it belongs to this product
+            product_image = ProductImage.query.filter_by(
+                id=image_id,
+                product_id=product_id
+            ).first()
+
+            if not product_image:
+                return jsonify({
+                    'success': False,
+                    'error': f'Image {image_id} not found for product {product_id}'
+                }), 404
+
+            # Update priority
+            product_image.priority = priority
+            updated_images.append(product_image)
+
+        # Commit all changes
+        db.session.commit()
+
+        current_app.logger.info(f"Updated priorities for {len(updated_images)} images of product {product_id}")
+
+        return jsonify({
+            'success': True,
+            'message': f'Updated priorities for {len(updated_images)} images',
+            'data': [img.to_dict() for img in updated_images]
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error updating image priorities: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
