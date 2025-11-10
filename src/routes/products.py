@@ -659,23 +659,15 @@ def approve_product_image(product_id, image_id):
         }), 500
 
 
-@products_bp.route('/products/<int:product_id>/images/<int:image_id>/reject', methods=['PUT'])
+@products_bp.route('/products/<int:product_id>/images/<int:image_id>/reject', methods=['DELETE'])
 def reject_product_image(product_id, image_id):
     """
-    Reject a product image
+    Reject and delete a product image from both database and S3
 
     Response:
         {
             "success": true,
-            "message": "Image rejected successfully",
-            "data": {
-                "id": 1,
-                "product_id": 1,
-                "image_url": "https://...",
-                "status": "rejected",
-                "created_at": "...",
-                "updated_at": "..."
-            }
+            "message": "Image deleted successfully"
         }
     """
     try:
@@ -694,14 +686,24 @@ def reject_product_image(product_id, image_id):
                 'error': f'Image {image_id} not found for product {product_id}'
             }), 404
 
-        # Update image status
-        image.status = 'rejected'
+        # Store image_url for S3 deletion
+        image_url = image.image_url
+
+        # Delete from database first
+        db.session.delete(image)
         db.session.commit()
+
+        # Delete from S3
+        try:
+            s3_service.delete_file(image_url)
+            current_app.logger.info(f"Deleted image from S3: {image_url}")
+        except Exception as s3_error:
+            # Log the error but don't fail the request since DB deletion succeeded
+            current_app.logger.error(f"Failed to delete image from S3: {str(s3_error)}")
 
         return jsonify({
             'success': True,
-            'message': 'Image rejected successfully',
-            'data': image.to_dict()
+            'message': 'Image deleted successfully'
         }), 200
 
     except Exception as e:
@@ -1098,9 +1100,25 @@ def generate_product_image(product_id):
             selected_prompt = selected_prompt_obj.text
             current_app.logger.info(f"Selected prompt {selected_prompt_obj.id} for product {product_id}")
 
+        # Validate product has a raw_image URL
+        if not product.raw_image:
+            return jsonify({
+                'success': False,
+                'error': 'Product does not have a raw_image URL'
+            }), 400
+
         # Download the raw image
-        current_app.logger.info(f"Downloading raw image for product {product_id}")
-        raw_image_path = download_image(product.raw_image)
+        current_app.logger.info(f"Downloading raw image for product {product_id}: {product.raw_image}")
+        try:
+            raw_image_path = download_image(product.raw_image)
+            current_app.logger.info(f"Downloaded and validated image: {raw_image_path}")
+        except Exception as download_error:
+            current_app.logger.error(f"Failed to download/validate image from {product.raw_image}: {str(download_error)}")
+            return jsonify({
+                'success': False,
+                'error': f'Failed to download or validate image from URL: {str(download_error)}',
+                'image_url': product.raw_image
+            }), 400
 
         # Generate output file path
         image_name = os.path.basename(raw_image_path)
@@ -1115,7 +1133,18 @@ def generate_product_image(product_id):
 
         # Generate the image using Gemini
         current_app.logger.info(f"Generating image for product {product_id} with prompt: {selected_prompt[:100]}...")
-        gemini_service._do_generate_image(raw_image_path, output_file_path, selected_prompt)
+        try:
+            gemini_service._do_generate_image(raw_image_path, output_file_path, selected_prompt)
+            current_app.logger.info(f"Successfully generated image: {output_file_path}")
+        except Exception as gemini_error:
+            current_app.logger.error(f"Gemini API error: {str(gemini_error)}")
+            # Clean up downloaded file
+            if os.path.exists(raw_image_path):
+                os.remove(raw_image_path)
+            return jsonify({
+                'success': False,
+                'error': f'Failed to generate image with AI: {str(gemini_error)}'
+            }), 500
 
         # Upload to S3
         bucket_name = current_app.config['S3_BUCKET_NAME']

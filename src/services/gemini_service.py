@@ -6,6 +6,7 @@ import requests
 from flask import current_app
 from google import genai
 from google.genai import types
+from PIL import Image
 
 from src.services.prompts import get_prompts_by_category
 
@@ -69,30 +70,192 @@ def _save_binary_file(file_name: str, data: bytes):
     print(f"File saved to: {file_name}")
 
 
+def validate_and_convert_image(image_path):
+    """
+    Validate and convert image to a format compatible with Gemini.
+    Returns the path to the validated/converted image.
+    """
+    try:
+        # Open and validate the image
+        img = Image.open(image_path)
+
+        # Convert RGBA to RGB if necessary (Gemini might not support RGBA)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            print(f"Converting image from {img.mode} to RGB")
+            # Create a white background
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+            img = background
+        elif img.mode != 'RGB':
+            print(f"Converting image from {img.mode} to RGB")
+            img = img.convert('RGB')
+
+        # Check image size - Gemini has limits
+        max_dimension = 3072  # Gemini's max dimension
+        if img.width > max_dimension or img.height > max_dimension:
+            print(f"Resizing image from {img.width}x{img.height}")
+            img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
+
+        # Save as JPEG with good quality
+        output_path = os.path.splitext(image_path)[0] + '_validated.jpg'
+        img.save(output_path, 'JPEG', quality=95)
+
+        print(f"Image validated and saved to {output_path}")
+        return output_path
+
+    except Exception as e:
+        print(f"Error validating image: {str(e)}")
+        raise ValueError(f"Invalid image file: {str(e)}")
+
+
+def _extract_google_drive_id(url):
+    """
+    Extract file ID from Google Drive URL
+    Supports various Google Drive URL formats
+    """
+    if 'drive.google.com' not in url:
+        return None
+
+    # Format: https://drive.google.com/file/d/{FILE_ID}/view
+    if '/file/d/' in url:
+        file_id = url.split('/file/d/')[1].split('/')[0]
+        return file_id
+
+    # Format: https://drive.google.com/open?id={FILE_ID}
+    if 'id=' in url:
+        file_id = url.split('id=')[1].split('&')[0]
+        return file_id
+
+    return None
+
+
+def _is_google_drive_url(url):
+    """Check if URL is a Google Drive URL"""
+    return 'drive.google.com' in url
+
+
+def _download_from_google_drive(url, destination):
+    """
+    Download file from Google Drive URL
+
+    Args:
+        url: Google Drive URL
+        destination: Local file path to save the downloaded file
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    file_id = _extract_google_drive_id(url)
+
+    if not file_id:
+        raise ValueError(f"Could not extract file ID from Google Drive URL: {url}")
+
+    print(f"Downloading from Google Drive (file_id: {file_id})")
+
+    # Google Drive direct download URL
+    download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    session = requests.Session()
+    response = session.get(download_url, stream=True, timeout=30)
+
+    # Handle large files with confirmation token
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            download_url = f"https://drive.google.com/uc?export=download&id={file_id}&confirm={value}"
+            response = session.get(download_url, stream=True, timeout=30)
+            break
+
+    if response.status_code != 200:
+        raise ValueError(f"Failed to download from Google Drive. Status code: {response.status_code}")
+
+    # Write to file
+    with open(destination, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=32768):
+            if chunk:
+                f.write(chunk)
+
+    return True
+
+
 def download_image(image_url, download_dir="/tmp"):
     # Ensure the directory exists
     os.makedirs(download_dir, exist_ok=True)
 
-    # Get filename from URL or fallback to a default
+    print(f"Downloading image from: {image_url}")
+
+    # Get filename from URL or use a default
     filename = os.path.basename(image_url.split("?")[0])
+    if not filename or filename == '':
+        filename = 'downloaded_image'
+
+    # Generate temporary file path
     file_path = os.path.join(download_dir, filename)
 
-    # Download the image
-    response = requests.get(image_url, timeout=30)
-    response.raise_for_status()
+    # Check if it's a Google Drive URL
+    if _is_google_drive_url(image_url):
+        print("Detected Google Drive URL")
+        _download_from_google_drive(image_url, file_path)
+        print(f"Downloaded from Google Drive to: {file_path}")
+    else:
+        # Regular download for S3 or other URLs
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
 
-    # Save to local file
-    with open(file_path, "wb") as f:
-        f.write(response.content)
+        # Check content-type to ensure it's an image
+        content_type = response.headers.get('content-type', '')
+        print(f"Content-Type: {content_type}")
 
-    return os.path.abspath(file_path)
+        if not content_type.startswith('image/'):
+            # Log the response content for debugging
+            print(f"Response content (first 500 chars): {response.text[:500]}")
+            raise ValueError(f"URL did not return an image. Content-Type: {content_type}")
+
+        # Check if we got actual image data
+        if len(response.content) < 100:
+            raise ValueError(f"Downloaded file is too small ({len(response.content)} bytes), likely not a valid image")
+
+        # If filename doesn't have an extension, try to detect from content-type
+        if not os.path.splitext(filename)[1]:
+            extension = mimetypes.guess_extension(content_type)
+            if extension:
+                filename = f"{filename}{extension}"
+            else:
+                # Default to .jpg if we can't determine
+                filename = f"{filename}.jpg"
+
+            file_path = os.path.join(download_dir, filename)
+
+        # Save to local file
+        with open(file_path, "wb") as f:
+            f.write(response.content)
+
+        print(f"Downloaded to: {file_path} ({len(response.content)} bytes)")
+
+    # Validate and convert the image to ensure compatibility
+    try:
+        validated_path = validate_and_convert_image(file_path)
+
+        # Clean up the original file if it's different from validated
+        if validated_path != file_path and os.path.exists(file_path):
+            os.remove(file_path)
+
+        return os.path.abspath(validated_path)
+    except Exception as e:
+        # Clean up the downloaded file on validation error
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
 
 
 def _get_mime_type(file_path: str) -> str:
     """Guesses the MIME type of a file based on its extension."""
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type is None:
-        raise ValueError(f"Could not determine MIME type for {file_path}")
+        # Default to image/jpeg if we can't determine the MIME type
+        print(f"Warning: Could not determine MIME type for {file_path}, defaulting to image/jpeg")
+        return "image/jpeg"
     return mime_type
 
 

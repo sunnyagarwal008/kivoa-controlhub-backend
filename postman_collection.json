@@ -353,6 +353,86 @@
       "name": "Product Images",
       "item": [
         {
+          "name": "Generate Product Image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/1/generate-image",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1", "generate-image"],
+              "query": [
+                {
+                  "key": "prompt_type",
+                  "value": "model_hand",
+                  "description": "Optional: Type filter for prompts (e.g., model_hand, satin, mirror)",
+                  "disabled": true
+                },
+                {
+                  "key": "prompt_text",
+                  "value": "Create a professional product image with elegant lighting",
+                  "description": "Optional: Custom prompt text. If provided, this will be used instead of DB prompts",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Generate a new product image using AI. If prompt_text is provided, uses that custom prompt. Otherwise, queries prompts from database based on product category and optional prompt_type, then randomly selects one. Generated image is saved to S3 and product_images table with status 'pending'."
+          }
+        },
+        {
+          "name": "Generate Product Image (Custom Prompt)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/1/generate-image?prompt_text=Create a professional product image with elegant lighting and soft shadows",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1", "generate-image"],
+              "query": [
+                {
+                  "key": "prompt_text",
+                  "value": "Create a professional product image with elegant lighting and soft shadows",
+                  "description": "Custom prompt text for image generation"
+                }
+              ]
+            },
+            "description": "Generate a product image using a custom prompt text"
+          }
+        },
+        {
+          "name": "Generate Product Image (DB Prompts with Type)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/1/generate-image?prompt_type=model_hand",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1", "generate-image"],
+              "query": [
+                {
+                  "key": "prompt_type",
+                  "value": "model_hand",
+                  "description": "Filter prompts by type (e.g., model_hand, satin, mirror)"
+                }
+              ]
+            },
+            "description": "Generate a product image using prompts from database filtered by category and type. Randomly selects one matching prompt."
+          }
+        },
+        {
+          "name": "Generate Product Image (DB Prompts Random)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/1/generate-image",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "1", "generate-image"]
+            },
+            "description": "Generate a product image using prompts from database for the product's category. Randomly selects one prompt from all active prompts for that category."
+          }
+        },
+        {
           "name": "Approve Product Image",
           "request": {
             "method": "PUT",
@@ -368,14 +448,14 @@
         {
           "name": "Reject Product Image",
           "request": {
-            "method": "PUT",
+            "method": "DELETE",
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/products/1/images/1/reject",
               "host": ["{{base_url}}"],
               "path": ["api", "products", "1", "images", "1", "reject"]
             },
-            "description": "Reject a product image. Sets image status to 'rejected'."
+            "description": "Reject and delete a product image from both database and S3."
           }
         },
         {
