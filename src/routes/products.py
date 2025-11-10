@@ -3,10 +3,12 @@ from marshmallow import ValidationError
 from sqlalchemy.orm import joinedload, contains_eager
 from collections import defaultdict
 import os
+import random
 from src.database import db
-from src.models import Category, Product, ProductImage
+from src.models import Category, Product, ProductImage, Prompt
 from src.schemas import ProductSchema
-from src.services import sqs_service, pdf_service, s3_service
+from src.services import sqs_service, pdf_service, s3_service, gemini_service
+from src.services.gemini_service import download_image
 
 products_bp = Blueprint('products', __name__)
 
@@ -1023,6 +1025,135 @@ def generate_product_catalog():
 
     except Exception as e:
         current_app.logger.error(f"Error generating catalog: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@products_bp.route('/products/<int:product_id>/generate-image', methods=['POST'])
+def generate_product_image(product_id):
+    """
+    Generate a new product image for a product using AI
+
+    Query Parameters:
+        - prompt_type: Optional type filter for prompts (e.g., 'model_hand', 'satin', 'mirror')
+        - prompt_text: Optional custom prompt text. If provided, this will be used instead of DB prompts
+
+    Response:
+        {
+            "success": true,
+            "message": "Product image generated successfully",
+            "data": {
+                "id": 1,
+                "product_id": 1,
+                "image_url": "https://...",
+                "status": "pending",
+                "created_at": "...",
+                "updated_at": "..."
+            }
+        }
+    """
+    try:
+        # Get product and verify it exists
+        product = Product.query.options(
+            joinedload(Product.category_ref),
+            joinedload(Product.product_images)
+        ).get_or_404(product_id)
+
+        # Get query parameters
+        prompt_type = request.args.get('prompt_type')
+        prompt_text = request.args.get('prompt_text')
+
+        # Determine which prompt to use
+        if prompt_text:
+            # Use the provided custom prompt
+            selected_prompt = prompt_text
+            current_app.logger.info(f"Using custom prompt for product {product_id}")
+        else:
+            # Get prompts from database based on product category and type
+            category_name = product.category_ref.name if product.category_ref else 'default'
+
+            # Query prompts from database
+            query = Prompt.query.filter(
+                Prompt.category_id == product.category_id,
+                Prompt.is_active == True
+            )
+
+            # Filter by type if provided
+            if prompt_type:
+                query = query.filter(Prompt.type == prompt_type)
+
+            prompts = query.all()
+
+            if not prompts:
+                return jsonify({
+                    'success': False,
+                    'error': f'No prompts found for category "{category_name}"' +
+                            (f' and type "{prompt_type}"' if prompt_type else '')
+                }), 404
+
+            # Randomly select one prompt
+            selected_prompt_obj = random.choice(prompts)
+            selected_prompt = selected_prompt_obj.text
+            current_app.logger.info(f"Selected prompt {selected_prompt_obj.id} for product {product_id}")
+
+        # Download the raw image
+        current_app.logger.info(f"Downloading raw image for product {product_id}")
+        raw_image_path = download_image(product.raw_image)
+
+        # Generate output file path
+        image_name = os.path.basename(raw_image_path)
+        image_name_parts = os.path.splitext(image_name)
+
+        # Count existing images to determine the next index
+        existing_images_count = len(product.product_images)
+        next_index = existing_images_count + 1
+
+        output_image_name = f"{image_name_parts[0]}-{next_index:02d}{image_name_parts[1]}"
+        output_file_path = os.path.join("/tmp", output_image_name)
+
+        # Generate the image using Gemini
+        current_app.logger.info(f"Generating image for product {product_id} with prompt: {selected_prompt[:100]}...")
+        gemini_service._do_generate_image(raw_image_path, output_file_path, selected_prompt)
+
+        # Upload to S3
+        bucket_name = current_app.config['S3_BUCKET_NAME']
+        file_extension = os.path.splitext(output_file_path)[1]
+        s3_key = f"product-images/{product.sku}-{next_index}{file_extension}"
+
+        current_app.logger.info(f"Uploading generated image to S3: {s3_key}")
+        image_url = s3_service.upload_file(output_file_path, bucket_name=bucket_name, key=s3_key)
+
+        # Save to product_images table with status 'pending'
+        product_image = ProductImage(
+            product_id=product_id,
+            image_url=image_url,
+            status='pending'
+        )
+        db.session.add(product_image)
+        db.session.commit()
+
+        current_app.logger.info(f"Successfully generated and saved image for product {product_id}: {image_url}")
+
+        # Clean up temporary files
+        try:
+            if os.path.exists(raw_image_path):
+                os.remove(raw_image_path)
+            if os.path.exists(output_file_path):
+                os.remove(output_file_path)
+        except Exception as cleanup_error:
+            current_app.logger.warning(f"Failed to clean up temporary files: {str(cleanup_error)}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Product image generated successfully',
+            'data': product_image.to_dict()
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error generating product image: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
