@@ -25,7 +25,7 @@ def get_prompts_by_category(category: str, prompt_type: str = None):
     """
     try:
         # Look up category by name
-        category_obj = Category.query.filter_by(name=category.lower()).first()
+        category_obj = Category.query.filter_by(name=category).first()
         if not category_obj:
             current_app.logger.warning(f"Category not found: {category}")
             return [[""]]  # Return empty prompt for backward compatibility

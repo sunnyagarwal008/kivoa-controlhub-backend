@@ -157,8 +157,8 @@ def bulk_create_products():
 
             # Set status based on is_raw_image flag
             # If is_raw_image is True, status is 'pending' (needs AI processing)
-            # If is_raw_image is False, status is 'live' (ready-to-use image)
-            status = 'pending' if is_raw_image else 'live'
+            # If is_raw_image is False, status is 'pending_review' (ready-to-use image)
+            status = 'pending' if is_raw_image else 'pending_review'
 
             # Create new product
             product = Product(
