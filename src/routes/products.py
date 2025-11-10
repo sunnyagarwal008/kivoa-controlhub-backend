@@ -1098,7 +1098,7 @@ def generate_product_image(product_id):
             # Randomly select one prompt
             selected_prompt_obj = random.choice(prompts)
             selected_prompt = selected_prompt_obj.text
-            current_app.logger.info(f"Selected prompt {selected_prompt_obj.id} for product {product_id}")
+            current_app.logger.info(f"total prompts: {len(prompts)}, selected prompt {selected_prompt} for product {product_id}, type: {prompt_type}, category: {category_name}")
 
         # Validate product has a raw_image URL
         if not product.raw_image:
