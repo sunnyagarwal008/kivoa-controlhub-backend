@@ -1132,7 +1132,7 @@ def generate_product_image(product_id):
         output_file_path = os.path.join("/tmp", output_image_name)
 
         # Generate the image using Gemini
-        current_app.logger.info(f"Generating image for product {product_id} with prompt: {selected_prompt[:100]}...")
+        current_app.logger.info(f"Generating image for product {product_id} with prompt: {selected_prompt}...")
         try:
             gemini_service._do_generate_image(raw_image_path, output_file_path, selected_prompt)
             current_app.logger.info(f"Successfully generated image: {output_file_path}")
