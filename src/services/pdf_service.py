@@ -4,7 +4,6 @@ import uuid
 from io import BytesIO
 from collections import defaultdict
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from flask import current_app
@@ -54,9 +53,6 @@ class PDFService:
         self._image_cache.clear()
         self._styles_cache.clear()
 
-        # Pre-download all images in parallel for better performance
-        self._preload_all_images(products_by_category)
-
         # Create a temporary file for the PDF
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
         pdf_path = temp_file.name
@@ -89,44 +85,6 @@ class PDFService:
         doc.build(elements)
 
         return pdf_path
-
-    def _preload_all_images(self, products_by_category):
-        """
-        Pre-download all product images in parallel for better performance
-
-        Args:
-            products_by_category: Dictionary with category names as keys and list of products as values
-        """
-        # Collect all unique image URLs
-        image_urls = set()
-        for products in products_by_category.values():
-            for product in products:
-                if product.product_images and len(product.product_images) > 0:
-                    image_url = product.product_images[0].image_url
-                    if image_url:
-                        image_urls.add(image_url)
-
-        if not image_urls:
-            return
-
-        current_app.logger.info(f"Pre-downloading {len(image_urls)} unique images in parallel")
-
-        # Download images in parallel using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            # Submit all download tasks
-            future_to_url = {
-                executor.submit(self._download_and_create_image, url, 2.5*inch, 2.5*inch): url
-                for url in image_urls
-            }
-
-            # Wait for all downloads to complete
-            for future in as_completed(future_to_url):
-                url = future_to_url[future]
-                try:
-                    # The result is already cached in _download_and_create_image
-                    future.result()
-                except Exception as e:
-                    current_app.logger.error(f"Error pre-downloading image {url}: {str(e)}")
 
     def _get_or_create_style(self, style_name, style_factory):
         """
