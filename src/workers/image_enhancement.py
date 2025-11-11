@@ -14,6 +14,7 @@ from src.database import db
 from src.models import Product, ProductImage
 from src.services import sqs_service, gemini_service, s3_service
 from src.services.gemini_service import download_image
+from src.utils.raw_image_utils import delete_raw_image_by_url
 
 
 class WorkerThread(threading.Thread):
@@ -81,10 +82,13 @@ class WorkerThread(threading.Thread):
                         status='pending'
                     )
                     db.session.add(product_image)
-                
+
                 # Update product status to 'pending_review'
                 product.status = 'pending_review'
-                
+
+                # Delete from raw_images table if the raw_image URL exists there
+                delete_raw_image_by_url(product.raw_image)
+
                 # Commit all changes
                 db.session.commit()
                 

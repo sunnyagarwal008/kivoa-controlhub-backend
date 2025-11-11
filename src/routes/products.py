@@ -9,6 +9,7 @@ from src.models import Category, Product, ProductImage, Prompt
 from src.schemas import ProductSchema
 from src.services import sqs_service, pdf_service, s3_service, gemini_service
 from src.services.gemini_service import download_image
+from src.utils.raw_image_utils import delete_raw_image_by_url
 
 products_bp = Blueprint('products', __name__)
 
@@ -219,12 +220,15 @@ def bulk_create_products():
 
                 current_app.logger.info(f"Copied image for product {product_info['id']} to S3: {image_url}")
 
+                # Delete from raw_images table if the raw_image URL exists there
+                delete_raw_image_by_url(product_info['raw_image'])
+
             except Exception as e:
                 # Log the error but don't fail the entire request
                 current_app.logger.error(f"Failed to copy image for product {product_info['id']}: {str(e)}")
                 raise e
 
-        # Commit product images
+        # Commit product images and raw_image deletions
         db.session.commit()
 
         # Send products with is_raw_image=True to SQS queue for AI processing
