@@ -122,6 +122,28 @@ def _extract_filter_params(request_args):
     }
 
 
+def _extract_filter_params_from_body(data):
+    """
+    Extract filter parameters from request body
+
+    Args:
+        data: Request JSON body
+
+    Returns:
+        dict: Dictionary of filter parameters
+    """
+    return {
+        'status': data.get('status'),
+        'category': data.get('category'),
+        'tags': data.get('tags'),
+        'excludeOutOfStock': data.get('excludeOutOfStock', False),
+        'minPrice': data.get('minPrice'),
+        'maxPrice': data.get('maxPrice'),
+        'sortBy': data.get('sortBy', 'created_at'),
+        'sortOrder': data.get('sortOrder', 'desc').lower()
+    }
+
+
 def _generate_catalog_pdf(filter_params):
     """
     Generate a PDF catalog based on filter parameters
@@ -202,16 +224,18 @@ def generate_product_catalog():
     6. Saves the catalog metadata to database
     7. Returns the catalog details
 
-    Query Parameters:
-        - name: Name for the catalog (required)
-        - status: Filter by status (e.g., pending, live, rejected)
-        - category: Filter by category name
-        - tags: Filter by tags (comma-separated, e.g., "wireless,bluetooth")
-        - excludeOutOfStock: Filter out products that are out of stock (true/false)
-        - minPrice: Filter products with price >= minPrice
-        - maxPrice: Filter products with price <= maxPrice
-        - sortBy: Sort field (sku_sequence_number, price, created_at) (default: created_at)
-        - sortOrder: Sort order (asc, desc) (default: desc)
+    Request Body:
+        {
+            "name": "Winter Collection 2024",  // required
+            "status": "live",  // optional - Filter by status (e.g., pending, live, rejected)
+            "category": "Electronics",  // optional - Filter by category name
+            "tags": "wireless,bluetooth",  // optional - Filter by tags (comma-separated)
+            "excludeOutOfStock": false,  // optional - Filter out products that are out of stock
+            "minPrice": 10.0,  // optional - Filter products with price >= minPrice
+            "maxPrice": 100.0,  // optional - Filter products with price <= maxPrice
+            "sortBy": "created_at",  // optional - Sort field (sku_sequence_number, price, created_at)
+            "sortOrder": "desc"  // optional - Sort order (asc, desc)
+        }
 
     Response:
         {
@@ -230,18 +254,28 @@ def generate_product_catalog():
         }
     """
     try:
-        # Get name parameter
-        name = request.args.get('name')
-        if not name:
-            error_msg = 'Missing required parameter: name'
+        # Get request body
+        data = request.get_json()
+        if not data:
+            error_msg = 'Request body is required'
             current_app.logger.error(f"Catalog generation failed: {error_msg}")
             return jsonify({
                 'success': False,
                 'error': error_msg
             }), 400
 
-        # Extract filter parameters
-        filter_params = _extract_filter_params(request.args)
+        # Get name parameter
+        name = data.get('name')
+        if not name:
+            error_msg = 'Missing required field: name'
+            current_app.logger.error(f"Catalog generation failed: {error_msg}")
+            return jsonify({
+                'success': False,
+                'error': error_msg
+            }), 400
+
+        # Extract filter parameters from request body
+        filter_params = _extract_filter_params_from_body(data)
 
         # Generate the PDF catalog
         catalog_url, total_products, num_categories = _generate_catalog_pdf(filter_params)
