@@ -291,7 +291,7 @@
           }
         },
         {
-          "name": "Update Product Status",
+          "name": "Bulk Update Product Status",
           "request": {
             "method": "PUT",
             "header": [
@@ -302,14 +302,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"status\": \"live\"\n}"
+              "raw": "{\n    \"product_ids\": [1, 2, 3],\n    \"status\": \"live\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/products/1/status",
+              "raw": "{{base_url}}/api/products/status",
               "host": ["{{base_url}}"],
-              "path": ["api", "products", "1", "status"]
+              "path": ["api", "products", "status"]
             },
-            "description": "Update product status. Valid values: live, rejected"
+            "description": "Bulk update product status for multiple products. Valid status values: live, rejected"
           }
         },
         {

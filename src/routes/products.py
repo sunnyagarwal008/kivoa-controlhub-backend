@@ -796,40 +796,72 @@ def update_image_status(product_id, image_id):
 
 
 
-@products_bp.route('/products/<int:product_id>/status', methods=['PUT'])
-def update_product_status(product_id):
+@products_bp.route('/products/status', methods=['PUT'])
+def update_product_status():
     """
-    Update product status to 'live' or 'rejected'
+    Bulk update product status to 'live' or 'rejected'
 
     Request Body:
         {
+            "product_ids": [1, 2, 3, 4],
             "status": "live" | "rejected"
         }
 
     Response:
         {
             "success": true,
-            "message": "Product status updated to 'live' successfully",
+            "message": "Updated status to 'live' for 4 products",
             "data": {
-                "id": 1,
-                "status": "live",
-                ...
+                "updated": 4,
+                "failed": 0,
+                "products": [
+                    {
+                        "id": 1,
+                        "status": "live",
+                        ...
+                    },
+                    ...
+                ]
             }
         }
     """
     try:
-        product = Product.query.get_or_404(product_id)
-
         # Get request data
         data = request.get_json()
 
-        if not data or 'status' not in data:
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing request body'
+            }), 400
+
+        if 'product_ids' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing "product_ids" field in request body'
+            }), 400
+
+        if 'status' not in data:
             return jsonify({
                 'success': False,
                 'error': 'Missing "status" field in request body'
             }), 400
 
+        product_ids = data['product_ids']
         new_status = data['status'].lower()
+
+        # Validate product_ids is a list
+        if not isinstance(product_ids, list):
+            return jsonify({
+                'success': False,
+                'error': '"product_ids" must be an array'
+            }), 400
+
+        if len(product_ids) == 0:
+            return jsonify({
+                'success': False,
+                'error': '"product_ids" array cannot be empty'
+            }), 400
 
         # Validate status
         valid_statuses = ['live', 'rejected']
@@ -839,14 +871,34 @@ def update_product_status(product_id):
                 'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'
             }), 400
 
-        # Update product status
-        product.status = new_status
+        # Fetch all products by IDs
+        products = Product.query.filter(Product.id.in_(product_ids)).all()
+
+        if len(products) == 0:
+            return jsonify({
+                'success': False,
+                'error': 'No products found with the provided IDs'
+            }), 404
+
+        # Update status for all products
+        updated_products = []
+        for product in products:
+            product.status = new_status
+            updated_products.append(product)
+
         db.session.commit()
+
+        # Prepare response data
+        products_data = [product_schema.dump(product) for product in updated_products]
 
         return jsonify({
             'success': True,
-            'message': f'Product status updated to "{new_status}" successfully',
-            'data': product_schema.dump(product)
+            'message': f'Updated status to "{new_status}" for {len(updated_products)} product(s)',
+            'data': {
+                'updated': len(updated_products),
+                'total_requested': len(product_ids),
+                'products': products_data
+            }
         }), 200
 
     except Exception as e:
