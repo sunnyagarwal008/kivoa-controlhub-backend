@@ -7,7 +7,7 @@ import json
 from src.database import db
 from src.models import Category, Product, PDFCatalog
 from src.schemas import PDFCatalogSchema
-from src.services import pdf_service
+from src.services import pdf_service, s3_service
 
 catalogs_bp = Blueprint('catalogs', __name__)
 
@@ -422,6 +422,55 @@ def refresh_catalog(catalog_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error refreshing catalog {catalog_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@catalogs_bp.route('/catalogs/<int:catalog_id>', methods=['DELETE'])
+def delete_catalog(catalog_id):
+    """
+    Delete a PDF catalog
+
+    This endpoint:
+    1. Retrieves the catalog by ID
+    2. Deletes the PDF file from S3
+    3. Deletes the catalog record from the database
+    4. Returns success message
+
+    Response:
+        {
+            "success": true,
+            "message": "Catalog deleted successfully"
+        }
+    """
+    try:
+        # Get the catalog by ID
+        catalog = PDFCatalog.query.get_or_404(catalog_id)
+
+        current_app.logger.info(f"Deleting catalog {catalog_id}: {catalog.name}")
+
+        # Delete the PDF file from S3
+        try:
+            s3_service.delete_file(catalog.s3_url)
+            current_app.logger.info(f"Deleted PDF from S3: {catalog.s3_url}")
+        except Exception as e:
+            # Log the error but continue with database deletion
+            current_app.logger.error(f"Failed to delete PDF from S3: {str(e)}")
+
+        # Delete the catalog from database
+        db.session.delete(catalog)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Catalog deleted successfully'
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting catalog {catalog_id}: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
