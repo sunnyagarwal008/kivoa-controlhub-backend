@@ -4,6 +4,7 @@ import uuid
 from io import BytesIO
 from collections import defaultdict
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from flask import current_app
@@ -22,18 +23,40 @@ class PDFService:
     """Service class for PDF generation operations"""
 
     def __init__(self):
-        pass
+        # Create a requests session for connection pooling
+        self.session = requests.Session()
+        # Configure connection pooling
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=20,
+            max_retries=3
+        )
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
+
+        # Cache for styles to avoid repeated creation
+        self._styles_cache = {}
+
+        # Cache for downloaded images
+        self._image_cache = {}
 
     def generate_product_catalog(self, products_by_category):
         """
         Generate a PDF catalog of products grouped by category
-        
+
         Args:
             products_by_category: Dictionary with category names as keys and list of products as values
-            
+
         Returns:
             str: Path to the generated PDF file
         """
+        # Clear caches from previous runs
+        self._image_cache.clear()
+        self._styles_cache.clear()
+
+        # Pre-download all images in parallel for better performance
+        self._preload_all_images(products_by_category)
+
         # Create a temporary file for the PDF
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
         pdf_path = temp_file.name
@@ -67,41 +90,90 @@ class PDFService:
 
         return pdf_path
 
+    def _preload_all_images(self, products_by_category):
+        """
+        Pre-download all product images in parallel for better performance
+
+        Args:
+            products_by_category: Dictionary with category names as keys and list of products as values
+        """
+        # Collect all unique image URLs
+        image_urls = set()
+        for products in products_by_category.values():
+            for product in products:
+                if product.product_images and len(product.product_images) > 0:
+                    image_url = product.product_images[0].image_url
+                    if image_url:
+                        image_urls.add(image_url)
+
+        if not image_urls:
+            return
+
+        current_app.logger.info(f"Pre-downloading {len(image_urls)} unique images in parallel")
+
+        # Download images in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Submit all download tasks
+            future_to_url = {
+                executor.submit(self._download_and_create_image, url, 2.5*inch, 2.5*inch): url
+                for url in image_urls
+            }
+
+            # Wait for all downloads to complete
+            for future in as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    # The result is already cached in _download_and_create_image
+                    future.result()
+                except Exception as e:
+                    current_app.logger.error(f"Error pre-downloading image {url}: {str(e)}")
+
+    def _get_or_create_style(self, style_name, style_factory):
+        """
+        Get a cached style or create it if it doesn't exist
+
+        Args:
+            style_name: Unique name for the style
+            style_factory: Function that creates the style
+
+        Returns:
+            ParagraphStyle: The cached or newly created style
+        """
+        if style_name not in self._styles_cache:
+            self._styles_cache[style_name] = style_factory()
+        return self._styles_cache[style_name]
+
     def _create_cover_page(self):
         """Create the cover page with dark green background and KIVOA branding"""
         elements = []
-        
+
         # Create a custom canvas for the cover page with dark green background
         # We'll use a table to create the colored background effect
-        
+
         # Get page dimensions
         page_width = letter[0]
         page_height = letter[1]
-        
-        # Create styles
-        styles = getSampleStyleSheet()
-        
-        # Logo style - large, centered, white text
-        logo_style = ParagraphStyle(
+
+        # Get cached styles
+        logo_style = self._get_or_create_style('logo', lambda: ParagraphStyle(
             'LogoStyle',
-            parent=styles['Heading1'],
+            parent=getSampleStyleSheet()['Heading1'],
             fontSize=72,
             textColor=colors.white,
             alignment=TA_CENTER,
             spaceAfter=30,
             fontName='Helvetica-Bold'
-        )
-        
-        # Subtitle style - centered, white text
-        subtitle_style = ParagraphStyle(
+        ))
+
+        subtitle_style = self._get_or_create_style('subtitle', lambda: ParagraphStyle(
             'SubtitleStyle',
-            parent=styles['Normal'],
+            parent=getSampleStyleSheet()['Normal'],
             fontSize=16,
             textColor=colors.white,
             alignment=TA_CENTER,
             leading=24,
             fontName='Helvetica'
-        )
+        ))
         
         # Add spacer to center content vertically
         elements.append(Spacer(1, 2.5*inch))
@@ -137,19 +209,16 @@ class PDFService:
     def _create_category_section(self, category_name, products):
         """Create a section for a category with products in 2-column grid"""
         elements = []
-        
-        # Create styles
-        styles = getSampleStyleSheet()
-        
-        # Category header style
-        category_style = ParagraphStyle(
+
+        # Get cached category header style
+        category_style = self._get_or_create_style('category_header', lambda: ParagraphStyle(
             'CategoryHeader',
-            parent=styles['Heading1'],
+            parent=getSampleStyleSheet()['Heading1'],
             fontSize=24,
             textColor=colors.HexColor('#1B4D3E'),  # Dark green
             spaceAfter=20,
             fontName='Helvetica-Bold'
-        )
+        ))
         
         # Add category header
         elements.append(Paragraph(category_name, category_style))
@@ -191,14 +260,14 @@ class PDFService:
     def _create_product_cell(self, product):
         """Create a cell for a single product with image and SKU"""
         cell_elements = []
-        
+
         # Get the first image URL
         image_url = None
         if product.product_images and len(product.product_images) > 0:
             # Get the first image
             image_url = product.product_images[0].image_url
-        
-        # Download and add image if available
+
+        # Download and add image if available (will use cached version)
         if image_url:
             try:
                 img = self._download_and_create_image(image_url, max_width=2.5*inch, max_height=2.5*inch)
@@ -207,17 +276,16 @@ class PDFService:
                     cell_elements.append(Spacer(1, 0.1*inch))
             except Exception as e:
                 current_app.logger.error(f"Error loading image for product {product.sku}: {str(e)}")
-        
-        # Add SKU as title
-        styles = getSampleStyleSheet()
-        sku_style = ParagraphStyle(
+
+        # Get cached SKU style
+        sku_style = self._get_or_create_style('sku', lambda: ParagraphStyle(
             'SKUStyle',
-            parent=styles['Normal'],
+            parent=getSampleStyleSheet()['Normal'],
             fontSize=12,
             textColor=colors.black,
             alignment=TA_CENTER,
             fontName='Helvetica-Bold'
-        )
+        ))
         
         sku_text = Paragraph(product.sku, sku_style)
         cell_elements.append(sku_text)
@@ -232,26 +300,33 @@ class PDFService:
         return cell_table
 
     def _download_and_create_image(self, image_url, max_width=2.5*inch, max_height=2.5*inch):
-        """Download an image from URL and create a ReportLab Image object"""
+        """Download an image from URL and create a ReportLab Image object with caching"""
+        # Create cache key based on URL and dimensions
+        cache_key = f"{image_url}_{max_width}_{max_height}"
+
+        # Return cached image if available
+        if cache_key in self._image_cache:
+            return self._image_cache[cache_key]
+
         try:
-            # Download the image
-            response = requests.get(image_url, timeout=10)
+            # Download the image using session for connection pooling
+            response = self.session.get(image_url, timeout=10)
             response.raise_for_status()
-            
+
             # Create Image object from bytes
             img_data = BytesIO(response.content)
             img = Image(img_data)
-            
+
             # Calculate aspect ratio and resize
             aspect = img.imageWidth / img.imageHeight
-            
+
             if aspect > 1:  # Wider than tall
                 img.drawWidth = min(max_width, img.imageWidth)
                 img.drawHeight = img.drawWidth / aspect
             else:  # Taller than wide
                 img.drawHeight = min(max_height, img.imageHeight)
                 img.drawWidth = img.drawHeight * aspect
-            
+
             # Ensure it doesn't exceed max dimensions
             if img.drawWidth > max_width:
                 img.drawWidth = max_width
@@ -259,10 +334,15 @@ class PDFService:
             if img.drawHeight > max_height:
                 img.drawHeight = max_height
                 img.drawWidth = img.drawHeight * aspect
-            
+
+            # Cache the image
+            self._image_cache[cache_key] = img
+
             return img
         except Exception as e:
             current_app.logger.error(f"Error downloading image from {image_url}: {str(e)}")
+            # Cache None to avoid retrying failed downloads
+            self._image_cache[cache_key] = None
             return None
 
     def upload_pdf_to_s3(self, pdf_path, filename=None):

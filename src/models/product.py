@@ -171,3 +171,30 @@ class RawImage(db.Model):
             'updated_at': self.updated_at.isoformat()
         }
 
+
+class PDFCatalog(db.Model):
+    """PDF Catalog model for storing generated product catalogs"""
+
+    __tablename__ = 'pdf_catalogs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    s3_url = db.Column(db.String(500), nullable=False)
+    filter_json = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<PDFCatalog {self.id} - {self.name}>'
+
+    def to_dict(self):
+        """Convert PDF catalog object to dictionary"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            's3_url': self.s3_url,
+            'filter_json': self.filter_json,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+
