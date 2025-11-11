@@ -233,9 +233,11 @@ def generate_product_catalog():
         # Get name parameter
         name = request.args.get('name')
         if not name:
+            error_msg = 'Missing required parameter: name'
+            current_app.logger.error(f"Catalog generation failed: {error_msg}")
             return jsonify({
                 'success': False,
-                'error': 'Missing required parameter: name'
+                'error': error_msg
             }), 400
 
         # Extract filter parameters
@@ -265,13 +267,15 @@ def generate_product_catalog():
         }), 201
 
     except ValueError as e:
+        error_msg = str(e)
+        current_app.logger.error(f"Catalog generation validation error: {error_msg}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': error_msg
         }), 400
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error generating catalog: {str(e)}")
+        current_app.logger.error(f"Error generating catalog: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
