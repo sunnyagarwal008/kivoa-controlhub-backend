@@ -482,6 +482,8 @@ def update_product(product_id):
             "category": "Electronics",           # Category name (will regenerate SKU if changed)
             "purchase_month": "0124",            # MMYY format (will regenerate SKU if changed)
             "raw_image": "https://...",          # S3 URL
+            "title": "Product Title",            # Product title
+            "description": "Product description", # Product description
             "mrp": 1000.00,                      # Maximum Retail Price
             "price": 800.00,                     # Selling Price
             "discount": 200.00,                  # Discount amount
@@ -499,6 +501,8 @@ def update_product(product_id):
                 "id": 1,
                 "category": "Electronics",
                 "sku": "ELEC-0001-0124",
+                "title": "Product Title",
+                "description": "Product description",
                 "tags": "wireless,bluetooth,premium",
                 "box_number": 42,
                 ...
