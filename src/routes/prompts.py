@@ -222,6 +222,7 @@ def update_prompt(prompt_id):
     """
     try:
         prompt = Prompt.query.get_or_404(prompt_id)
+        current_app.logger.info(f"Updating prompt: {request.get_json()}")
         data = prompt_create_update_schema.load(request.get_json(), partial=True)
 
         # Update fields
