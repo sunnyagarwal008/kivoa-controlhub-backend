@@ -61,6 +61,9 @@ class Product(db.Model):
     sku_sequence_number = db.Column(db.Integer, nullable=False)
     purchase_month = db.Column(db.String(4), nullable=False)
     raw_image = db.Column(db.String(500), nullable=False)
+    title = db.Column(db.String(255), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    handle = db.Column(db.String(255), nullable=True)
     mrp = db.Column(db.Numeric(10, 2), nullable=False)
     price = db.Column(db.Numeric(10, 2), nullable=False)
     discount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -95,6 +98,9 @@ class Product(db.Model):
             'sku_sequence_number': self.sku_sequence_number,
             'purchase_month': self.purchase_month,
             'raw_image': self.raw_image,
+            'title': self.title,
+            'description': self.description,
+            'handle': self.handle,
             'mrp': float(self.mrp),
             'price': float(self.price),
             'discount': float(self.discount),

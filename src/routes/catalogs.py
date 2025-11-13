@@ -1,13 +1,15 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, Response
 from marshmallow import ValidationError
 from sqlalchemy.orm import joinedload, contains_eager
 from collections import defaultdict
 import os
 import json
+import io
+import csv
 from src.database import db
 from src.models import Category, Product, PDFCatalog
 from src.schemas import PDFCatalogSchema
-from src.services import pdf_service, s3_service
+from src.services import pdf_service, s3_service, csv_service
 
 catalogs_bp = Blueprint('catalogs', __name__)
 
@@ -476,3 +478,241 @@ def delete_catalog(catalog_id):
             'error': str(e)
         }), 500
 
+
+
+
+
+@catalogs_bp.route('/catalogs/shopify-export', methods=['GET'])
+def export_shopify_csv():
+    """
+    Export products as Shopify-compatible CSV file
+
+    This endpoint:
+    1. Accepts filter parameters as query parameters
+    2. Filters products based on provided parameters
+    3. Generates a CSV file in Shopify product import format
+    4. Returns the CSV file directly as a download
+
+    Query Parameters:
+        status: optional - Filter by status (e.g., pending, live, rejected)
+        category: optional - Filter by category name
+        tags: optional - Filter by tags (comma-separated)
+        excludeOutOfStock: optional - Filter out products that are out of stock (true/false)
+        minPrice: optional - Filter products with price >= minPrice
+        maxPrice: optional - Filter products with price <= maxPrice
+        sortBy: optional - Sort field (sku_sequence_number, price, created_at)
+        sortOrder: optional - Sort order (asc, desc)
+
+    Response:
+        CSV file download with Shopify-compatible product data
+    """
+    try:
+        # Extract filter parameters from query parameters
+        filter_params = _extract_filter_params(request.args)
+
+        # Validate sort parameters
+        is_valid, error_message = _validate_sort_parameters(
+            filter_params['sortBy'],
+            filter_params['sortOrder']
+        )
+        if not is_valid:
+            return jsonify({
+                'success': False,
+                'error': error_message
+            }), 400
+
+        # Build query using common method
+        query = _build_products_query(
+            status=filter_params['status'],
+            category_name=filter_params['category'],
+            tags_param=filter_params['tags'],
+            exclude_out_of_stock=filter_params['excludeOutOfStock'],
+            min_price=filter_params['minPrice'],
+            max_price=filter_params['maxPrice'],
+            sort_by=filter_params['sortBy'],
+            sort_order=filter_params['sortOrder']
+        )
+
+        # Get all matching products (no pagination)
+        products = query.all()
+
+        if not products:
+            return jsonify({
+                'success': False,
+                'error': 'No products found matching the specified filters'
+            }), 400
+
+        current_app.logger.info(f"Generating Shopify CSV export with {len(products)} products")
+
+        # Generate CSV in memory
+        output = io.StringIO()
+
+        # Define Shopify CSV headers
+        headers = [
+            'Handle', 'Title', 'Body (HTML)', 'Vendor', 'Type', 'Tags', 'Published',
+            'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Option3 Name', 'Option3 Value',
+            'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty',
+            'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price',
+            'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode',
+            'Image Src', 'Image Position', 'Image Alt Text',
+            'Gift Card', 'SEO Title', 'SEO Description',
+            'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group',
+            'Google Shopping / MPN', 'Google Shopping / AdWords Grouping', 'Google Shopping / AdWords Labels',
+            'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0',
+            'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3',
+            'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code',
+            'Cost per item', 'Status'
+        ]
+
+        writer = csv.DictWriter(output, fieldnames=headers)
+        writer.writeheader()
+
+        # Process each product
+        for product in products:
+            # Get product images sorted by priority
+            sorted_images = sorted(product.product_images, key=lambda img: img.priority) if product.product_images else []
+
+            # Use handle if available, otherwise generate from SKU
+            handle = product.handle if product.handle else product.sku.lower().replace(' ', '-')
+
+            # Use title if available, otherwise use SKU
+            title = product.title if product.title else product.sku
+
+            # Use description if available, otherwise empty
+            description = product.description if product.description else ''
+
+            # Get category name
+            category_name = product.category_ref.name if product.category_ref else ''
+
+            # Determine published status based on product status
+            published = 'TRUE' if product.status == 'live' else 'FALSE'
+
+            # Determine inventory quantity
+            inventory_qty = product.quantity if product.quantity is not None else 0
+
+            # First row with product details
+            row = {
+                'Handle': handle,
+                'Title': title,
+                'Body (HTML)': description,
+                'Vendor': 'KIVOA',
+                'Type': category_name,
+                'Tags': product.tags if product.tags else '',
+                'Published': published,
+                'Option1 Name': 'Default',
+                'Option1 Value': 'Default',
+                'Option2 Name': '',
+                'Option2 Value': '',
+                'Option3 Name': '',
+                'Option3 Value': '',
+                'Variant SKU': product.sku,
+                'Variant Grams': '',
+                'Variant Inventory Tracker': 'shopify',
+                'Variant Inventory Qty': inventory_qty,
+                'Variant Inventory Policy': 'deny',
+                'Variant Fulfillment Service': 'manual',
+                'Variant Price': float(product.price),
+                'Variant Compare At Price': float(product.mrp),
+                'Variant Requires Shipping': 'TRUE',
+                'Variant Taxable': 'TRUE',
+                'Variant Barcode': '',
+                'Image Src': sorted_images[0].image_url if sorted_images else product.raw_image,
+                'Image Position': '1',
+                'Image Alt Text': title,
+                'Gift Card': 'FALSE',
+                'SEO Title': title,
+                'SEO Description': description[:160] if description else title,
+                'Google Shopping / Google Product Category': '',
+                'Google Shopping / Gender': '',
+                'Google Shopping / Age Group': '',
+                'Google Shopping / MPN': product.sku,
+                'Google Shopping / AdWords Grouping': '',
+                'Google Shopping / AdWords Labels': '',
+                'Google Shopping / Condition': 'new',
+                'Google Shopping / Custom Product': 'FALSE',
+                'Google Shopping / Custom Label 0': '',
+                'Google Shopping / Custom Label 1': '',
+                'Google Shopping / Custom Label 2': '',
+                'Google Shopping / Custom Label 3': '',
+                'Google Shopping / Custom Label 4': '',
+                'Variant Image': '',
+                'Variant Weight Unit': '',
+                'Variant Tax Code': '',
+                'Cost per item': '',
+                'Status': 'active' if product.status == 'live' else 'draft'
+            }
+            writer.writerow(row)
+
+            # Add additional rows for remaining images (if any)
+            for idx, image in enumerate(sorted_images[1:], start=2):
+                image_row = {
+                    'Handle': handle,
+                    'Title': '',
+                    'Body (HTML)': '',
+                    'Vendor': '',
+                    'Type': '',
+                    'Tags': '',
+                    'Published': '',
+                    'Option1 Name': '',
+                    'Option1 Value': '',
+                    'Option2 Name': '',
+                    'Option2 Value': '',
+                    'Option3 Name': '',
+                    'Option3 Value': '',
+                    'Variant SKU': '',
+                    'Variant Grams': '',
+                    'Variant Inventory Tracker': '',
+                    'Variant Inventory Qty': '',
+                    'Variant Inventory Policy': '',
+                    'Variant Fulfillment Service': '',
+                    'Variant Price': '',
+                    'Variant Compare At Price': '',
+                    'Variant Requires Shipping': '',
+                    'Variant Taxable': '',
+                    'Variant Barcode': '',
+                    'Image Src': image.image_url,
+                    'Image Position': str(idx),
+                    'Image Alt Text': title,
+                    'Gift Card': '',
+                    'SEO Title': '',
+                    'SEO Description': '',
+                    'Google Shopping / Google Product Category': '',
+                    'Google Shopping / Gender': '',
+                    'Google Shopping / Age Group': '',
+                    'Google Shopping / MPN': '',
+                    'Google Shopping / AdWords Grouping': '',
+                    'Google Shopping / AdWords Labels': '',
+                    'Google Shopping / Condition': '',
+                    'Google Shopping / Custom Product': '',
+                    'Google Shopping / Custom Label 0': '',
+                    'Google Shopping / Custom Label 1': '',
+                    'Google Shopping / Custom Label 2': '',
+                    'Google Shopping / Custom Label 3': '',
+                    'Google Shopping / Custom Label 4': '',
+                    'Variant Image': '',
+                    'Variant Weight Unit': '',
+                    'Variant Tax Code': '',
+                    'Cost per item': '',
+                    'Status': ''
+                }
+                writer.writerow(image_row)
+
+        # Get CSV content
+        csv_content = output.getvalue()
+        output.close()
+
+        # Return CSV as downloadable file
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': 'attachment; filename=shopify_export.csv'
+            }
+        )
+
+    except Exception as e:
+        current_app.logger.error(f"Error generating Shopify CSV export: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

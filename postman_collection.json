@@ -350,6 +350,99 @@
       ]
     },
     {
+      "name": "Catalogs",
+      "item": [
+        {
+          "name": "Generate Product Catalog PDF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"live\",\n    \"category\": \"Electronics\",\n    \"tags\": \"wireless,bluetooth\",\n    \"excludeOutOfStock\": true,\n    \"minPrice\": 100,\n    \"maxPrice\": 5000,\n    \"sortBy\": \"price\",\n    \"sortOrder\": \"asc\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/catalogs/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "catalogs", "generate"]
+            },
+            "description": "Generate a PDF catalog with filtered products. All parameters are optional. Returns PDF URL and total products count."
+          }
+        },
+        {
+          "name": "Export Shopify CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"live\",\n    \"category\": \"Electronics\",\n    \"tags\": \"wireless,bluetooth\",\n    \"excludeOutOfStock\": true,\n    \"minPrice\": 100,\n    \"maxPrice\": 5000,\n    \"sortBy\": \"price\",\n    \"sortOrder\": \"asc\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/catalogs/shopify-export",
+              "host": ["{{base_url}}"],
+              "path": ["api", "catalogs", "shopify-export"]
+            },
+            "description": "Export products as Shopify-compatible CSV file. Accepts same filter parameters as PDF catalog generation. Returns CSV URL and total products count. CSV includes: Handle, Title, Body (HTML), Vendor, Type, Tags, Variants (SKU, Price, Inventory), Images, and SEO fields."
+          }
+        },
+        {
+          "name": "Export Shopify CSV (All Products)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/catalogs/shopify-export",
+              "host": ["{{base_url}}"],
+              "path": ["api", "catalogs", "shopify-export"]
+            },
+            "description": "Export all products to Shopify CSV format without any filters"
+          }
+        },
+        {
+          "name": "Export Shopify CSV (Live Products Only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"live\",\n    \"excludeOutOfStock\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/catalogs/shopify-export",
+              "host": ["{{base_url}}"],
+              "path": ["api", "catalogs", "shopify-export"]
+            },
+            "description": "Export only live, in-stock products to Shopify CSV format"
+          }
+        }
+      ]
+    },
+    {
       "name": "Product Images",
       "item": [
         {

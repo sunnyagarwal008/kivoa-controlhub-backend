@@ -1,13 +1,14 @@
+import os
+import random
+
 from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
 from sqlalchemy.orm import joinedload, contains_eager
-from collections import defaultdict
-import os
-import random
+
 from src.database import db
 from src.models import Category, Product, ProductImage, Prompt
 from src.schemas import ProductSchema
-from src.services import sqs_service, pdf_service, s3_service, gemini_service
+from src.services import sqs_service, s3_service, gemini_service
 from src.services.gemini_service import download_image
 from src.utils.raw_image_utils import delete_raw_image_by_url
 
