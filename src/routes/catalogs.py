@@ -41,7 +41,7 @@ def _validate_sort_parameters(sort_by, sort_order):
 
 def _build_products_query(status=None, category_name=None, tags_param=None,
                          exclude_out_of_stock=False, min_price=None, max_price=None,
-                         sort_by='created_at', sort_order='desc'):
+                         box_number=None, sort_by='created_at', sort_order='desc'):
     """
     Build a SQLAlchemy query for products with filters and sorting
 
@@ -52,6 +52,7 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
         exclude_out_of_stock: Whether to exclude out of stock products
         min_price: Minimum price filter
         max_price: Maximum price filter
+        box_number: Filter by box number
         sort_by: Field to sort by (default: created_at)
         sort_order: Sort order - 'asc' or 'desc' (default: desc)
 
@@ -92,6 +93,9 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
     if max_price is not None:
         query = query.filter(Product.price <= max_price)
 
+    if box_number is not None:
+        query = query.filter(Product.box_number == box_number)
+
     # Apply sorting
     sort_column = getattr(Product, sort_by)
     if sort_order == 'asc':
@@ -119,6 +123,7 @@ def _extract_filter_params(request_args):
         'excludeOutOfStock': request_args.get('excludeOutOfStock', 'false').lower() == 'true',
         'minPrice': request_args.get('minPrice', type=float),
         'maxPrice': request_args.get('maxPrice', type=float),
+        'boxNumber': request_args.get('boxNumber', type=int),
         'sortBy': request_args.get('sortBy', 'created_at'),
         'sortOrder': request_args.get('sortOrder', 'desc').lower()
     }
@@ -141,6 +146,7 @@ def _extract_filter_params_from_body(data):
         'excludeOutOfStock': data.get('excludeOutOfStock', False),
         'minPrice': data.get('minPrice'),
         'maxPrice': data.get('maxPrice'),
+        'boxNumber': data.get('boxNumber'),
         'sortBy': data.get('sortBy', 'created_at'),
         'sortOrder': data.get('sortOrder', 'desc').lower()
     }
@@ -172,6 +178,7 @@ def _generate_catalog_pdf(filter_params):
         exclude_out_of_stock=filter_params['excludeOutOfStock'],
         min_price=filter_params['minPrice'],
         max_price=filter_params['maxPrice'],
+        box_number=filter_params['boxNumber'],
         sort_by=filter_params['sortBy'],
         sort_order=filter_params['sortOrder']
     )
@@ -235,6 +242,7 @@ def generate_product_catalog():
             "excludeOutOfStock": false,  // optional - Filter out products that are out of stock
             "minPrice": 10.0,  // optional - Filter products with price >= minPrice
             "maxPrice": 100.0,  // optional - Filter products with price <= maxPrice
+            "boxNumber": 1,  // optional - Filter by box number (integer)
             "sortBy": "created_at",  // optional - Sort field (sku_sequence_number, price, created_at)
             "sortOrder": "desc"  // optional - Sort order (asc, desc)
         }
@@ -502,6 +510,7 @@ def export_shopify_csv():
         excludeOutOfStock: optional - Filter out products that are out of stock (true/false)
         minPrice: optional - Filter products with price >= minPrice
         maxPrice: optional - Filter products with price <= maxPrice
+        boxNumber: optional - Filter by box number (integer)
         sortBy: optional - Sort field (sku_sequence_number, price, created_at)
         sortOrder: optional - Sort order (asc, desc)
 
@@ -531,6 +540,7 @@ def export_shopify_csv():
             exclude_out_of_stock=filter_params['excludeOutOfStock'],
             min_price=filter_params['minPrice'],
             max_price=filter_params['maxPrice'],
+            box_number=filter_params['boxNumber'],
             sort_by=filter_params['sortBy'],
             sort_order=filter_params['sortOrder']
         )
