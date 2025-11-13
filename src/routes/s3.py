@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
 from src.schemas import PresignedUrlRequestSchema, PresignedUrlResponseSchema
 from src.services import s3_service
@@ -46,13 +46,15 @@ def generate_presigned_url():
         }), 200
         
     except ValidationError as e:
+        current_app.logger.warning(f"Validation error generating presigned URL: {e.messages}")
         return jsonify({
             'success': False,
             'error': 'Validation error',
             'details': e.messages
         }), 400
-        
+
     except Exception as e:
+        current_app.logger.error(f"Error generating presigned URL: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

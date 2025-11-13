@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
 from src.database import db
 from src.models import RawImage
@@ -88,6 +88,7 @@ def get_raw_images():
         }), 200
 
     except Exception as e:
+        current_app.logger.error(f"Error fetching raw images: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -191,6 +192,8 @@ def bulk_create_raw_images():
         }), 201
 
     except ValidationError as e:
+        db.session.rollback()
+        current_app.logger.warning(f"Validation error in bulk create raw images: {e.messages}")
         return jsonify({
             'success': False,
             'error': 'Validation error',
@@ -199,6 +202,7 @@ def bulk_create_raw_images():
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error in bulk create raw images: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -318,6 +322,7 @@ def bulk_delete_raw_images():
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error in bulk delete raw images: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

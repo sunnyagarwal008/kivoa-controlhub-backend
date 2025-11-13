@@ -261,8 +261,18 @@ def bulk_create_products():
             }
         }), 201
 
+    except ValidationError as e:
+        db.session.rollback()
+        current_app.logger.warning(f"Validation error in bulk create products: {e.messages}")
+        return jsonify({
+            'success': False,
+            'error': 'Validation error',
+            'details': e.messages
+        }), 400
+
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error in bulk create products: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -316,6 +326,7 @@ def search_products():
         }), 200
 
     except Exception as e:
+        current_app.logger.error(f"Error searching products: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -409,6 +420,7 @@ def get_products():
         }), 200
 
     except Exception as e:
+        current_app.logger.error(f"Error fetching products: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -446,6 +458,7 @@ def get_product(product_id):
         }), 200
 
     except Exception as e:
+        current_app.logger.error(f"Error fetching product {product_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -544,6 +557,7 @@ def update_product(product_id):
         }), 200
 
     except ValidationError as e:
+        current_app.logger.warning(f"Validation error updating product {product_id}: {e.messages}")
         return jsonify({
             'success': False,
             'error': 'Validation error',
@@ -552,6 +566,7 @@ def update_product(product_id):
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error updating product {product_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -605,6 +620,7 @@ def delete_product(product_id):
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error deleting product {product_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -658,6 +674,7 @@ def approve_product_image(product_id, image_id):
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error approving product image {image_id} for product {product_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -713,6 +730,7 @@ def reject_product_image(product_id, image_id):
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error rejecting/deleting product image {image_id} for product {product_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -790,6 +808,7 @@ def update_image_status(product_id, image_id):
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error updating image status for image {image_id} of product {product_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -904,6 +923,7 @@ def update_product_status():
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error updating product status: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -965,6 +985,7 @@ def update_product_stock(product_id):
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Error updating product stock for product {product_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

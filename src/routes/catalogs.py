@@ -417,9 +417,11 @@ def refresh_catalog(catalog_id):
         }), 200
 
     except ValueError as e:
+        error_msg = str(e)
+        current_app.logger.error(f"Catalog refresh validation error for catalog {catalog_id}: {error_msg}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': error_msg
         }), 400
     except Exception as e:
         db.session.rollback()

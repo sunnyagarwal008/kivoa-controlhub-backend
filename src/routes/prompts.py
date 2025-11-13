@@ -125,6 +125,7 @@ def get_prompt(prompt_id):
         }), 200
 
     except Exception as e:
+        current_app.logger.error(f"Error fetching prompt {prompt_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
