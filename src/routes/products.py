@@ -42,7 +42,7 @@ def _validate_sort_parameters(sort_by, sort_order):
 
 def _build_products_query(status=None, category_name=None, tags_param=None,
                          exclude_out_of_stock=False, min_price=None, max_price=None,
-                         sort_by='created_at', sort_order='desc'):
+                         box_number=None, sort_by='created_at', sort_order='desc'):
     """
     Build a SQLAlchemy query for products with filters and sorting
 
@@ -53,6 +53,7 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
         exclude_out_of_stock: Whether to exclude out of stock products
         min_price: Minimum price filter
         max_price: Maximum price filter
+        box_number: Filter by box number
         sort_by: Field to sort by (default: created_at)
         sort_order: Sort order - 'asc' or 'desc' (default: desc)
 
@@ -92,6 +93,9 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
 
     if max_price is not None:
         query = query.filter(Product.price <= max_price)
+
+    if box_number is not None:
+        query = query.filter(Product.box_number == box_number)
 
     # Apply sorting
     sort_column = getattr(Product, sort_by)
@@ -345,6 +349,7 @@ def get_products():
         - excludeOutOfStock: Filter out products that are out of stock (true/false)
         - minPrice: Filter products with price >= minPrice
         - maxPrice: Filter products with price <= maxPrice
+        - boxNumber: Filter by box number (integer)
         - sortBy: Sort field (sku_sequence_number, price) (default: created_at)
         - sortOrder: Sort order (asc, desc) (default: desc)
         - page: Page number (default: 1)
@@ -370,6 +375,7 @@ def get_products():
         exclude_out_of_stock = request.args.get('excludeOutOfStock', 'false').lower() == 'true'
         min_price = request.args.get('minPrice', type=float)
         max_price = request.args.get('maxPrice', type=float)
+        box_number = request.args.get('boxNumber', type=int)
         sort_by = request.args.get('sortBy', 'created_at')
         sort_order = request.args.get('sortOrder', 'desc').lower()
         page = request.args.get('page', 1, type=int)
@@ -391,6 +397,7 @@ def get_products():
             exclude_out_of_stock=exclude_out_of_stock,
             min_price=min_price,
             max_price=max_price,
+            box_number=box_number,
             sort_by=sort_by,
             sort_order=sort_order
         )
@@ -986,6 +993,68 @@ def update_product_stock(product_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error updating product stock for product {product_id}: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@products_bp.route('/products/<int:product_id>/flagged', methods=['PUT'])
+def update_product_flagged(product_id):
+    """
+    Update product flagged status
+
+    Request Body:
+        {
+            "flagged": true | false
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Product marked as flagged successfully",
+            "data": {
+                "id": 1,
+                "flagged": true,
+                ...
+            }
+        }
+    """
+    try:
+        product = Product.query.get_or_404(product_id)
+
+        # Get request data
+        data = request.get_json()
+
+        if not data or 'flagged' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing "flagged" field in request body'
+            }), 400
+
+        flagged = data['flagged']
+
+        # Validate flagged is boolean
+        if not isinstance(flagged, bool):
+            return jsonify({
+                'success': False,
+                'error': '"flagged" must be a boolean value (true or false)'
+            }), 400
+
+        # Update product flagged status
+        product.flagged = flagged
+        db.session.commit()
+
+        flagged_status = 'flagged' if flagged else 'unflagged'
+        return jsonify({
+            'success': True,
+            'message': f'Product marked as {flagged_status} successfully',
+            'data': product_schema.dump(product)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error updating product flagged status for product {product_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

@@ -73,6 +73,7 @@ class Product(db.Model):
     box_number = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending')
     in_stock = db.Column(db.Boolean, nullable=False, default=True)
+    flagged = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -110,6 +111,7 @@ class Product(db.Model):
             'box_number': self.box_number,
             'status': self.status,
             'in_stock': self.in_stock,
+            'flagged': self.flagged,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

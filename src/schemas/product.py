@@ -70,6 +70,7 @@ class ProductSchema(Schema):
     box_number = fields.Int(required=False, allow_none=True)
     status = fields.Str(dump_only=True)
     in_stock = fields.Bool(dump_only=True)
+    flagged = fields.Bool(dump_only=True)
     images = fields.Nested(ProductImageSchema, many=True, dump_only=True)  # Product images
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
