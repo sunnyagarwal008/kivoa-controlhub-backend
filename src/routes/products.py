@@ -115,7 +115,7 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
 def bulk_create_products():
     try:
         request_data = request.get_json()
-
+        current_app.logger.info(f"bulk create products request: {request_data}")
         if not request_data or 'products' not in request_data:
             return jsonify({
                 'success': False,
