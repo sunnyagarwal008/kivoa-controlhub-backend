@@ -1061,6 +1061,97 @@ def update_product_flagged(product_id):
         }), 500
 
 
+@products_bp.route('/products/<int:product_id>/upload-image', methods=['POST'])
+def upload_product_image(product_id):
+    """
+    Upload a new image for a live product by copying from a URL to S3
+
+    Request Body:
+        {
+            "image_url": "https://example.com/image.jpg"
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Product image uploaded successfully",
+            "data": {
+                "id": 123,
+                "product_id": 1,
+                "image_url": "https://bucket.s3.region.amazonaws.com/product-images/SKU-2.jpg",
+                "status": "approved",
+                "priority": 0,
+                "created_at": "2024-01-01T00:00:00",
+                "updated_at": "2024-01-01T00:00:00"
+            }
+        }
+    """
+    try:
+        # Get request data
+        request_data = request.get_json()
+
+        if not request_data or 'image_url' not in request_data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing "image_url" in request body'
+            }), 400
+
+        image_url = request_data['image_url']
+
+        if not image_url or not isinstance(image_url, str):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid "image_url" - must be a non-empty string'
+            }), 400
+
+        # Validate that the product exists
+        product = Product.query.get_or_404(product_id)
+
+        current_app.logger.info(f"Uploading new image for product {product_id} (SKU: {product.sku}) from URL: {image_url}")
+
+        # Get file extension from the image URL
+        file_extension = os.path.splitext(image_url.split('?')[0])[1]
+        if not file_extension:
+            file_extension = '.jpg'  # default extension
+
+        # Count existing images to determine the next index
+        existing_images_count = len(product.product_images)
+        next_index = existing_images_count + 1
+
+        # Create S3 key with format: product-images/{sku}-{next_index}{extension}
+        s3_key = f"product-images/{product.sku}-{next_index}{file_extension}"
+
+        current_app.logger.info(f"Copying image to S3 with key: {s3_key}")
+
+        # Copy image from URL to S3
+        uploaded_image_url = s3_service.copy_image_from_url_to_s3(image_url, s3_key)
+
+        # Create ProductImage entry with status 'approved' (for live products)
+        product_image = ProductImage(
+            product_id=product_id,
+            image_url=uploaded_image_url,
+            status='approved'
+        )
+        db.session.add(product_image)
+        db.session.commit()
+
+        current_app.logger.info(f"Successfully uploaded and saved image for product {product_id}: {uploaded_image_url}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Product image uploaded successfully',
+            'data': product_image.to_dict()
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error uploading product image for product {product_id}: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @products_bp.route('/products/<int:product_id>/generate-image', methods=['POST'])
 def generate_product_image(product_id):
     """
