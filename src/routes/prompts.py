@@ -154,7 +154,12 @@ def create_prompt():
         }
     """
     try:
-        data = prompt_create_update_schema.load(request.get_json())
+        # Get request data and sanitize text field
+        request_data = request.get_json()
+        if 'text' in request_data and request_data['text']:
+            request_data['text'] = request_data['text'].replace('\x00', '')
+
+        data = prompt_create_update_schema.load(request_data)
 
         # Look up category by name
         category = Category.query.filter_by(name=data['category']).first()
@@ -222,8 +227,14 @@ def update_prompt(prompt_id):
     """
     try:
         prompt = Prompt.query.get_or_404(prompt_id)
-        current_app.logger.info(f"Updating prompt: {request.get_json()}")
-        data = prompt_create_update_schema.load(request.get_json(), partial=True)
+
+        # Get request data and sanitize text field
+        request_data = request.get_json()
+        if 'text' in request_data and request_data['text']:
+            request_data['text'] = request_data['text'].replace('\x00', '')
+
+        current_app.logger.info(f"Updating prompt: {request_data}")
+        data = prompt_create_update_schema.load(request_data, partial=True)
 
         # Update fields
         if 'text' in data:
@@ -363,6 +374,10 @@ def bulk_create_prompts():
         created_prompts = []
 
         for index, prompt_data in enumerate(prompts_data):
+            # Sanitize text field
+            if 'text' in prompt_data and prompt_data['text']:
+                prompt_data['text'] = prompt_data['text'].replace('\x00', '')
+
             # Validate prompt data
             validated_data = prompt_create_update_schema.load(prompt_data)
 
