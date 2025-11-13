@@ -41,7 +41,7 @@ def _validate_sort_parameters(sort_by, sort_order):
 
 def _build_products_query(status=None, category_name=None, tags_param=None,
                          exclude_out_of_stock=False, min_price=None, max_price=None,
-                         box_number=None, sort_by='created_at', sort_order='desc'):
+                         box_number=None, flagged=None, sort_by='created_at', sort_order='desc'):
     """
     Build a SQLAlchemy query for products with filters and sorting
 
@@ -53,6 +53,7 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
         min_price: Minimum price filter
         max_price: Maximum price filter
         box_number: Filter by box number
+        flagged: Filter by flagged status (True/False)
         sort_by: Field to sort by (default: created_at)
         sort_order: Sort order - 'asc' or 'desc' (default: desc)
 
@@ -96,6 +97,9 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
     if box_number is not None:
         query = query.filter(Product.box_number == box_number)
 
+    if flagged is not None:
+        query = query.filter(Product.flagged == flagged)
+
     # Apply sorting
     sort_column = getattr(Product, sort_by)
     if sort_order == 'asc':
@@ -116,6 +120,11 @@ def _extract_filter_params(request_args):
     Returns:
         dict: Dictionary of filter parameters
     """
+    flagged_param = request_args.get('flagged')
+    flagged = None
+    if flagged_param is not None:
+        flagged = flagged_param.lower() == 'true'
+
     return {
         'status': request_args.get('status'),
         'category': request_args.get('category'),
@@ -124,6 +133,7 @@ def _extract_filter_params(request_args):
         'minPrice': request_args.get('minPrice', type=float),
         'maxPrice': request_args.get('maxPrice', type=float),
         'boxNumber': request_args.get('boxNumber', type=int),
+        'flagged': flagged,
         'sortBy': request_args.get('sortBy', 'created_at'),
         'sortOrder': request_args.get('sortOrder', 'desc').lower()
     }
@@ -147,6 +157,7 @@ def _extract_filter_params_from_body(data):
         'minPrice': data.get('minPrice'),
         'maxPrice': data.get('maxPrice'),
         'boxNumber': data.get('boxNumber'),
+        'flagged': data.get('flagged'),
         'sortBy': data.get('sortBy', 'created_at'),
         'sortOrder': data.get('sortOrder', 'desc').lower()
     }
@@ -179,6 +190,7 @@ def _generate_catalog_pdf(filter_params):
         min_price=filter_params['minPrice'],
         max_price=filter_params['maxPrice'],
         box_number=filter_params['boxNumber'],
+        flagged=filter_params['flagged'],
         sort_by=filter_params['sortBy'],
         sort_order=filter_params['sortOrder']
     )
@@ -541,6 +553,7 @@ def export_shopify_csv():
             min_price=filter_params['minPrice'],
             max_price=filter_params['maxPrice'],
             box_number=filter_params['boxNumber'],
+            flagged=filter_params['flagged'],
             sort_by=filter_params['sortBy'],
             sort_order=filter_params['sortOrder']
         )
