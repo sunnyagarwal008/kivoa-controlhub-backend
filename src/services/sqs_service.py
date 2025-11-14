@@ -21,32 +21,37 @@ class SQSService:
             )
         return self.sqs_client
     
-    def send_message(self, product_id):
+    def send_message(self, product_id, prompt_type=None):
         """
         Send a product ID to SQS queue for processing
-        
+
         Args:
             product_id: ID of the product to process
-            
+            prompt_type: Optional prompt type for AI image generation
+
         Returns:
             dict: Response from SQS
         """
         sqs_client = self._get_sqs_client()
         queue_url = current_app.config['SQS_QUEUE_URL']
-        
+
         try:
-            message_body = json.dumps({
+            message_body = {
                 'product_id': product_id
-            })
-            
+            }
+
+            # Include prompt_type if provided
+            if prompt_type:
+                message_body['prompt_type'] = prompt_type
+
             response = sqs_client.send_message(
                 QueueUrl=queue_url,
-                MessageBody=message_body
+                MessageBody=json.dumps(message_body)
             )
-            
-            current_app.logger.info(f"Sent product_id {product_id} to SQS queue")
+
+            current_app.logger.info(f"Sent product_id {product_id} to SQS queue with prompt_type: {prompt_type}")
             return response
-            
+
         except ClientError as e:
             current_app.logger.error(f"Error sending message to SQS: {str(e)}")
             raise Exception(f"Failed to send message to SQS: {str(e)}")

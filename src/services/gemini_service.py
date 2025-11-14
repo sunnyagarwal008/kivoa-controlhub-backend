@@ -23,8 +23,8 @@ class GeminiService:
             self.client = genai.Client(api_key=current_app.config['GEMINI_API_KEY'])
         return self.client
 
-    def generate_images(self, input_file_path: str, prompt_category: str, number_of_images: int = 3):
-        prompts = get_prompts_by_category(prompt_category)
+    def generate_images(self, input_file_path: str, prompt_category: str, number_of_images: int = 3, prompt_type: str = None):
+        prompts = get_prompts_by_category(prompt_category, prompt_type)
         output_images = []
         for i in range(1, number_of_images + 1):
             prompt = random.choice(prompts[i - 1])

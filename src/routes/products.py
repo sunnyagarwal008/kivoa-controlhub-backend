@@ -165,6 +165,9 @@ def bulk_create_products():
             # Check if this is a raw image that needs AI processing
             is_raw_image = validated_data.get('is_raw_image', True)
 
+            # Get optional prompt_type for AI image generation
+            prompt_type = validated_data.get('prompt_type')
+
             # Set status based on is_raw_image flag
             # If is_raw_image is True, status is 'pending' (needs AI processing)
             # If is_raw_image is False, status is 'pending_review' (ready-to-use image)
@@ -194,7 +197,10 @@ def bulk_create_products():
 
             # Track products based on processing type
             if is_raw_image:
-                product_ids_for_queue.append(product.id)
+                product_ids_for_queue.append({
+                    'id': product.id,
+                    'prompt_type': prompt_type
+                })
             else:
                 products_for_direct_upload.append({
                     'id': product.id,
@@ -241,13 +247,13 @@ def bulk_create_products():
         db.session.commit()
 
         # Send products with is_raw_image=True to SQS queue for AI processing
-        for product_id in product_ids_for_queue:
+        for product_info in product_ids_for_queue:
             try:
-                sqs_service.send_message(product_id)
+                sqs_service.send_message(product_info['id'], product_info['prompt_type'])
             except Exception as e:
                 # Log the error but don't fail the entire request
                 # The products are already created
-                current_app.logger.error(f"Failed to send product_id {product_id} to SQS: {str(e)}")
+                current_app.logger.error(f"Failed to send product_id {product_info['id']} to SQS: {str(e)}")
 
         # Prepare response message
         if product_ids_for_queue and products_for_direct_upload:
@@ -1294,7 +1300,8 @@ def generate_product_image(product_id):
         product_image = ProductImage(
             product_id=product_id,
             image_url=image_url,
-            status='pending'
+            status='pending',
+            prompt_type=prompt_type
         )
         db.session.add(product_image)
         db.session.commit()

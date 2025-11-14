@@ -29,19 +29,20 @@ class WorkerThread(threading.Thread):
         """Stop the worker thread"""
         self.running = False
     
-    def process_product(self, product_id):
+    def process_product(self, product_id, prompt_type=None):
         """
         Process a single product: fetch from DB, generate enhanced images,
         upload to S3, save to product_images table, update product status
-        
+
         Args:
             product_id: ID of the product to process
+            prompt_type: Optional prompt type for AI image generation
         """
         with self.app.app_context():
             try:
                 # Fetch product from database
                 product = Product.query.get(product_id)
-                
+
                 if not product:
                     current_app.logger.error(f"Product {product_id} not found")
                     return False
@@ -49,7 +50,7 @@ class WorkerThread(threading.Thread):
                 # Get category name from relationship
                 category_name = product.category_ref.name if product.category_ref else 'default'
 
-                current_app.logger.info(f"Processing product {product_id} - {category_name}")
+                current_app.logger.info(f"Processing product {product_id} - {category_name} with prompt_type: {prompt_type}")
 
                 # Download the raw image
                 raw_image = download_image(product.raw_image)
@@ -57,7 +58,7 @@ class WorkerThread(threading.Thread):
                 # Get the configured number of enhanced images to generate
                 ai_images_count = current_app.config['ENHANCED_IMAGES_COUNT']
 
-                ai_images = gemini_service.generate_images(raw_image, category_name, ai_images_count)
+                ai_images = gemini_service.generate_images(raw_image, category_name, ai_images_count, prompt_type)
                 created_image_urls = []
 
                 # Generate enhanced images
@@ -75,11 +76,12 @@ class WorkerThread(threading.Thread):
                     current_app.logger.info(f"Created enhanced images for product {product_id}: {image_url}")
 
                 for image_url in created_image_urls:
-                    # Save to product_images table
+                    # Save to product_images table with prompt_type
                     product_image = ProductImage(
                         product_id=product_id,
                         image_url=image_url,
-                        status='pending'
+                        status='pending',
+                        prompt_type=prompt_type
                     )
                     db.session.add(product_image)
 
@@ -91,10 +93,10 @@ class WorkerThread(threading.Thread):
 
                 # Commit all changes
                 db.session.commit()
-                
+
                 current_app.logger.info(f"Successfully processed product {product_id}. Created {len(created_image_urls)} enhanced images.")
                 return True
-                
+
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.error(f"Error processing product {product_id}: {str(e)}")
@@ -120,22 +122,23 @@ class WorkerThread(threading.Thread):
                     for message in messages:
                         if not self.running:
                             break
-                        
+
                         try:
                             # Parse message body
                             body = json.loads(message['Body'])
                             product_id = body.get('product_id')
-                            
+                            prompt_type = body.get('prompt_type')
+
                             if not product_id:
                                 current_app.logger.error(f"Invalid message format: {message['Body']}")
                                 sqs_service.delete_message(message['ReceiptHandle'])
                                 continue
-                            
-                            current_app.logger.info(f"Received message for product_id: {product_id}")
-                            
+
+                            current_app.logger.info(f"Received message for product_id: {product_id}, prompt_type: {prompt_type}")
+
                             # Process the product
-                            success = self.process_product(product_id)
-                            
+                            success = self.process_product(product_id, prompt_type)
+
                             if success:
                                 # Delete message from queue after successful processing
                                 sqs_service.delete_message(message['ReceiptHandle'])
@@ -143,7 +146,7 @@ class WorkerThread(threading.Thread):
                             else:
                                 # Message will be retried based on SQS configuration
                                 current_app.logger.warning(f"Failed to process product {product_id}, message will be retried")
-                        
+
                         except Exception as e:
                             current_app.logger.error(f"Error processing message: {str(e)}")
                             # Don't delete the message, let it be retried
