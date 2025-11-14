@@ -87,7 +87,7 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
             query = query.filter(db.or_(*tag_filters))
 
     if exclude_out_of_stock:
-        query = query.filter(Product.in_stock == True)
+        query = query.filter(Product.inventory > 0)
 
     if min_price is not None:
         query = query.filter(Product.price >= min_price)
@@ -1012,8 +1012,9 @@ def update_product_stock(product_id):
                 'error': '"in_stock" must be a boolean value (true or false)'
             }), 400
 
-        # Update product stock status
-        product.in_stock = in_stock
+        # Update product inventory based on stock status
+        # Set inventory to 0 for out_of_stock, 1 for in_stock
+        product.inventory = 1 if in_stock else 0
         db.session.commit()
 
         stock_status = 'in stock' if in_stock else 'out of stock'

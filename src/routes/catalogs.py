@@ -86,7 +86,7 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
             query = query.filter(db.or_(*tag_filters))
 
     if exclude_out_of_stock:
-        query = query.filter(Product.in_stock == True)
+        query = query.filter(Product.inventory > 0)
 
     if min_price is not None:
         query = query.filter(Product.price >= min_price)

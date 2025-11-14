@@ -72,13 +72,18 @@ class Product(db.Model):
     tags = db.Column(db.String(500), nullable=True)
     box_number = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending')
-    in_stock = db.Column(db.Boolean, nullable=False, default=True)
+    inventory = db.Column(db.Integer, nullable=False, default=1)
     flagged = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationship with ProductImage
     product_images = db.relationship('ProductImage', backref='product', lazy=True, cascade='all, delete-orphan')
+
+    @property
+    def in_stock(self):
+        """Computed property for backward compatibility - returns True if inventory > 0"""
+        return self.inventory > 0
 
     def __repr__(self):
         return f'<Product {self.id} - {self.sku}>'
