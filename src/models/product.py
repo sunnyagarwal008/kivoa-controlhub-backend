@@ -83,13 +83,14 @@ class Product(db.Model):
     def __repr__(self):
         return f'<Product {self.id} - {self.sku}>'
 
-    def to_dict(self, include_category_details=False, include_images=False):
+    def to_dict(self, include_category_details=False, include_images=False, exclude_fields=None):
         """
         Convert product object to dictionary
 
         Args:
             include_category_details (bool): Include full category object
             include_images (bool): Include product images
+            exclude_fields (list): List of field names to exclude from the result
         """
         result = {
             'id': self.id,
@@ -115,6 +116,11 @@ class Product(db.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
+
+        # Remove excluded fields if specified
+        if exclude_fields:
+            for field in exclude_fields:
+                result.pop(field, None)
 
         # Include full category details if requested
         if include_category_details and self.category_ref:

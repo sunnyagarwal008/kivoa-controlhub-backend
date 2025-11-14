@@ -193,7 +193,12 @@ def bulk_create_products():
             db.session.add(product)
             db.session.flush()  # Get the ID without committing
 
-            created_products.append(product_schema.dump(product))
+            # Dump product and exclude title, description, handle from bulk create response
+            product_data = product_schema.dump(product)
+            product_data.pop('title', None)
+            product_data.pop('description', None)
+            product_data.pop('handle', None)
+            created_products.append(product_data)
 
             # Track products based on processing type
             if is_raw_image:
@@ -328,8 +333,9 @@ def search_products():
         products = query.order_by(Product.created_at.desc()).all()
 
         # Convert products to dict with category details and images
+        # Exclude title, description, and handle from the search results
         products_data = [
-            product.to_dict(include_category_details=True, include_images=True)
+            product.to_dict(include_category_details=True, include_images=True, exclude_fields=['title', 'description', 'handle'])
             for product in products
         ]
 
@@ -426,8 +432,9 @@ def get_products():
         )
 
         # Convert products to dict with category details and images
+        # Exclude title, description, and handle from the list view
         products_data = [
-            product.to_dict(include_category_details=True, include_images=True)
+            product.to_dict(include_category_details=True, include_images=True, exclude_fields=['title', 'description', 'handle'])
             for product in pagination.items
         ]
 
@@ -935,8 +942,14 @@ def update_product_status():
 
         db.session.commit()
 
-        # Prepare response data
-        products_data = [product_schema.dump(product) for product in updated_products]
+        # Prepare response data - exclude title, description, handle from bulk status update
+        products_data = []
+        for product in updated_products:
+            product_data = product_schema.dump(product)
+            product_data.pop('title', None)
+            product_data.pop('description', None)
+            product_data.pop('handle', None)
+            products_data.append(product_data)
 
         return jsonify({
             'success': True,
