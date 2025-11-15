@@ -12,6 +12,101 @@ orders_bp = Blueprint('orders', __name__)
 place_order_schema = PlaceOrderSchema()
 
 
+@orders_bp.route('/orders', methods=['GET'])
+def get_orders():
+    """
+    Retrieve orders from Shopify with pagination and filters
+
+    This endpoint fetches orders from Shopify and supports:
+    1. Pagination using page_info tokens
+    2. Filtering by status, financial status, fulfillment status
+    3. Date range filtering
+    4. Orders are returned in descending order by created_at (latest first)
+
+    Query Parameters:
+        - status: Filter by order status (open, closed, cancelled, any). Default: any
+        - limit: Number of orders per page (1-250). Default: 50
+        - page_info: Page info token for pagination (from previous response)
+        - created_at_min: Show orders created after date (ISO 8601 format, e.g., 2024-01-01T00:00:00Z)
+        - created_at_max: Show orders created before date (ISO 8601 format)
+        - financial_status: Filter by financial status (authorized, pending, paid, partially_paid, refunded, voided, partially_refunded, any, unpaid)
+        - fulfillment_status: Filter by fulfillment status (shipped, partial, unshipped, any, unfulfilled)
+
+    Response:
+        {
+            "success": true,
+            "data": {
+                "orders": [...],
+                "pagination": {
+                    "limit": 50,
+                    "has_next": true,
+                    "has_previous": false,
+                    "next_page_info": "eyJsYXN0X2lkIjo...",
+                    "previous_page_info": null
+                },
+                "count": 50
+            }
+        }
+    """
+    try:
+        # Get query parameters
+        status = request.args.get('status', 'any')
+        limit = request.args.get('limit', 50, type=int)
+        page_info = request.args.get('page_info')
+        created_at_min = request.args.get('created_at_min')
+        created_at_max = request.args.get('created_at_max')
+        financial_status = request.args.get('financial_status')
+        fulfillment_status = request.args.get('fulfillment_status')
+
+        # Validate limit
+        if limit < 1 or limit > 250:
+            return jsonify({
+                'success': False,
+                'error': 'Limit must be between 1 and 250'
+            }), 400
+
+        current_app.logger.info(f"Fetching orders with status={status}, limit={limit}")
+
+        # Fetch orders from Shopify
+        result = shopify_service.get_orders(
+            status=status,
+            limit=limit,
+            page_info=page_info,
+            created_at_min=created_at_min,
+            created_at_max=created_at_max,
+            financial_status=financial_status,
+            fulfillment_status=fulfillment_status
+        )
+
+        orders = result['orders']
+        page_info_data = result['page_info']
+
+        # Build pagination response
+        pagination = {
+            'limit': limit,
+            'has_next': page_info_data['next'] is not None,
+            'has_previous': page_info_data['previous'] is not None,
+            'next_page_info': page_info_data['next'],
+            'previous_page_info': page_info_data['previous']
+        }
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'orders': orders,
+                'pagination': pagination,
+                'count': len(orders)
+            }
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error fetching orders: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @orders_bp.route('/orders/place', methods=['POST'])
 def place_order():
     """

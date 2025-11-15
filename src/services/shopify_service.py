@@ -350,6 +350,126 @@ class ShopifyService:
             'fulfillment': fulfillment
         }
 
+    def get_orders(self, status=None, limit=50, page_info=None, created_at_min=None,
+                   created_at_max=None, financial_status=None, fulfillment_status=None):
+        """
+        Retrieve orders from Shopify with pagination and filters
+
+        Args:
+            status (str): Filter by order status (open, closed, cancelled, any). Default: any
+            limit (int): Number of orders to retrieve (1-250). Default: 50
+            page_info (str): Page info token for pagination (from Link header)
+            created_at_min (str): Show orders created after date (ISO 8601 format)
+            created_at_max (str): Show orders created before date (ISO 8601 format)
+            financial_status (str): Filter by financial status (authorized, pending, paid, etc.)
+            fulfillment_status (str): Filter by fulfillment status (shipped, partial, unshipped, any)
+
+        Returns:
+            dict: Response containing:
+                - orders: List of order objects
+                - page_info: Pagination info with next/previous page tokens
+        """
+        self._get_config()
+
+        # Build query parameters
+        params = []
+
+        if status:
+            params.append(f'status={status}')
+        else:
+            params.append('status=any')
+
+        if limit:
+            # Shopify allows max 250 orders per request
+            limit = min(limit, 250)
+            params.append(f'limit={limit}')
+
+        if created_at_min:
+            params.append(f'created_at_min={created_at_min}')
+
+        if created_at_max:
+            params.append(f'created_at_max={created_at_max}')
+
+        if financial_status:
+            params.append(f'financial_status={financial_status}')
+
+        if fulfillment_status:
+            params.append(f'fulfillment_status={fulfillment_status}')
+
+        # Add order by created_at descending to get latest orders first
+        params.append('order=created_at desc')
+
+        # Build URL with pagination
+        if page_info:
+            # Use page_info for cursor-based pagination
+            params.append(f'page_info={page_info}')
+
+        query_string = '&'.join(params)
+        url = self._get_api_url(f'orders.json?{query_string}')
+        headers = self._get_headers()
+
+        current_app.logger.info(f"Fetching orders from Shopify with params: {query_string}")
+
+        response = requests.get(url, headers=headers)
+
+        if response.status_code not in [200, 201]:
+            error_msg = f"Shopify API error retrieving orders: {response.status_code} - {response.text}"
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
+
+        orders = response.json().get('orders', [])
+
+        # Extract pagination info from Link header
+        link_header = response.headers.get('Link', '')
+        page_info_result = self._parse_link_header(link_header)
+
+        current_app.logger.info(f"Successfully retrieved {len(orders)} orders from Shopify")
+
+        return {
+            'orders': orders,
+            'page_info': page_info_result
+        }
+
+    def _parse_link_header(self, link_header):
+        """
+        Parse Shopify's Link header for pagination info
+
+        Args:
+            link_header (str): Link header from Shopify response
+
+        Returns:
+            dict: Pagination info with next and previous page tokens
+        """
+        page_info = {
+            'next': None,
+            'previous': None
+        }
+
+        if not link_header:
+            return page_info
+
+        # Parse Link header format: <url>; rel="next", <url>; rel="previous"
+        links = link_header.split(',')
+
+        for link in links:
+            parts = link.strip().split(';')
+            if len(parts) != 2:
+                continue
+
+            url_part = parts[0].strip('<> ')
+            rel_part = parts[1].strip()
+
+            # Extract page_info from URL
+            if 'page_info=' in url_part:
+                page_info_value = url_part.split('page_info=')[1].split('&')[0]
+
+                if 'rel="next"' in rel_part:
+                    page_info['next'] = page_info_value
+                elif 'rel="previous"' in rel_part:
+                    page_info['previous'] = page_info_value
+
+        return page_info
+
 
 # Create a singleton instance
 shopify_service = ShopifyService()

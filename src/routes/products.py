@@ -18,6 +18,38 @@ product_schema = ProductSchema()
 products_schema = ProductSchema(many=True)
 
 
+def _get_next_image_index(product_images):
+    """
+    Determine the next image index by examining existing image URLs.
+
+    Extracts the index from image filenames (e.g., "SKU-001-0001-0124-3.jpg" -> 3)
+    and returns max_index + 1.
+
+    Args:
+        product_images: List of ProductImage objects
+
+    Returns:
+        int: The next available index (max existing index + 1, or 1 if no images exist)
+    """
+    max_index = 0
+    for product_image in product_images:
+        # Extract filename from URL (e.g., "product-images/SKU-001-0001-0124-3.jpg" -> "SKU-001-0001-0124-3.jpg")
+        filename = os.path.basename(product_image.image_url.split('?')[0])
+        # Remove extension (e.g., "SKU-001-0001-0124-3.jpg" -> "SKU-001-0001-0124-3")
+        name_without_ext = os.path.splitext(filename)[0]
+        # Split by hyphen and get the last part (e.g., "SKU-001-0001-0124-3" -> "3")
+        parts = name_without_ext.split('-')
+        if parts:
+            try:
+                index = int(parts[-1])
+                max_index = max(max_index, index)
+            except ValueError:
+                # If the last part is not a number, skip this image
+                pass
+
+    return max_index + 1
+
+
 def _validate_sort_parameters(sort_by, sort_order):
     """
     Validate sort parameters
@@ -1148,9 +1180,8 @@ def upload_product_image(product_id):
         if not file_extension:
             file_extension = '.jpg'  # default extension
 
-        # Count existing images to determine the next index
-        existing_images_count = len(product.product_images)
-        next_index = existing_images_count + 1
+        # Determine the next index by examining existing image URLs
+        next_index = _get_next_image_index(product.product_images)
 
         # Create S3 key with format: product-images/{sku}-{next_index}{extension}
         s3_key = f"product-images/{product.sku}-{next_index}{file_extension}"
@@ -1280,9 +1311,8 @@ def generate_product_image(product_id):
         image_name = os.path.basename(raw_image_path)
         image_name_parts = os.path.splitext(image_name)
 
-        # Count existing images to determine the next index
-        existing_images_count = len(product.product_images)
-        next_index = existing_images_count + 1
+        # Determine the next index by examining existing image URLs
+        next_index = _get_next_image_index(product.product_images)
 
         output_image_name = f"{image_name_parts[0]}-{next_index:02d}{image_name_parts[1]}"
         output_file_path = os.path.join("/tmp", output_image_name)
