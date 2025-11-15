@@ -1,6 +1,7 @@
 from src.schemas.product import ProductSchema, ProductImageSchema, CategorySchema, CategoryCreateUpdateSchema, RawImageSchema, PDFCatalogSchema
 from src.schemas.s3 import PresignedUrlRequestSchema, PresignedUrlResponseSchema
 from src.schemas.prompt import PromptSchema, PromptCreateUpdateSchema, PromptFilterSchema
+from src.schemas.order import PlaceOrderSchema, AddressSchema
 
 __all__ = [
     'ProductSchema',
@@ -13,6 +14,8 @@ __all__ = [
     'PresignedUrlResponseSchema',
     'PromptSchema',
     'PromptCreateUpdateSchema',
-    'PromptFilterSchema'
+    'PromptFilterSchema',
+    'PlaceOrderSchema',
+    'AddressSchema'
 ]
 

@@ -35,6 +35,11 @@ class Config:
     # Image Enhancement Configuration
     ENHANCED_IMAGES_COUNT = int(os.getenv('ENHANCED_IMAGES_COUNT', 3))
 
+    # Shopify Configuration
+    SHOPIFY_STORE_URL = os.getenv('SHOPIFY_STORE_URL')
+    SHOPIFY_ACCESS_TOKEN = os.getenv('SHOPIFY_ACCESS_TOKEN')
+    SHOPIFY_API_VERSION = os.getenv('SHOPIFY_API_VERSION', '2024-01')
+
     # JSON Configuration
     JSON_SORT_KEYS = False
 

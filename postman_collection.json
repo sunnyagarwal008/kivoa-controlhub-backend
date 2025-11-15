@@ -638,6 +638,55 @@
       ]
     },
     {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Place Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"sku\": \"ELEC-0001-0124\",\n    \"quantity\": 1,\n    \"per_unit_price\": 999.99,\n    \"shipping_charges\": 50.00,\n    \"customer_name\": \"John Doe\",\n    \"customer_phone\": \"+1234567890\",\n    \"customer_address\": {\n        \"address1\": \"123 Main St\",\n        \"city\": \"New York\",\n        \"province\": \"NY\",\n        \"country\": \"United States\",\n        \"zip\": \"10001\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders/place",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "place"]
+            },
+            "description": "Place an order on Shopify and reduce inventory. This endpoint: 1) Validates the order request, 2) Checks product availability, 3) Places order on Shopify, 4) Reduces inventory in database only if Shopify order succeeds. If Shopify order fails, inventory is not modified."
+          }
+        },
+        {
+          "name": "Place Order (Multiple Quantity)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"sku\": \"ELEC-0001-0124\",\n    \"quantity\": 5,\n    \"per_unit_price\": 999.99,\n    \"shipping_charges\": 100.00,\n    \"customer_name\": \"Jane Smith\",\n    \"customer_phone\": \"+1987654321\",\n    \"customer_address\": {\n        \"address1\": \"456 Oak Avenue\",\n        \"city\": \"Los Angeles\",\n        \"province\": \"CA\",\n        \"country\": \"United States\",\n        \"zip\": \"90001\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders/place",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "place"]
+            },
+            "description": "Place an order with multiple quantity. Inventory will be reduced by the specified quantity."
+          }
+        }
+      ]
+    },
+    {
       "name": "Prompts",
       "item": [
         {

@@ -3,6 +3,7 @@ from src.services.sqs_service import SQSService, sqs_service
 from src.services.gemini_service import GeminiService, gemini_service
 from src.services.pdf_service import PDFService, pdf_service
 from src.services.csv_service import CSVService, csv_service
+from src.services.shopify_service import ShopifyService, shopify_service
 
 __all__ = [
     'S3Service',
@@ -14,6 +15,8 @@ __all__ = [
     'PDFService',
     'pdf_service',
     'CSVService',
-    'csv_service'
+    'csv_service',
+    'ShopifyService',
+    'shopify_service'
 ]
 
