@@ -22,7 +22,8 @@ def place_order():
     2. Checks if the product exists and has sufficient inventory
     3. Finds or creates customer in Shopify by phone number
     4. Creates an order in Shopify with tax-inclusive pricing
-    5. Reduces the inventory in the database
+    5. Marks the order as fulfilled
+    6. Reduces the inventory in the database
 
     Request Body:
         {

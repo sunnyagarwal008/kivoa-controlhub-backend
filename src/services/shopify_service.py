@@ -194,31 +194,91 @@ class ShopifyService:
     def complete_draft_order(self, draft_order_id):
         """
         Complete a draft order (convert to order)
-        
+
         Args:
             draft_order_id (int): Draft order ID
-        
+
         Returns:
             dict: Completed order response
         """
         self._get_config()
-        
+
         url = self._get_api_url(f'draft_orders/{draft_order_id}/complete.json')
         headers = self._get_headers()
-        
+
         current_app.logger.info(f"Completing Shopify draft order: {draft_order_id}")
-        
+
         response = requests.put(url, json={}, headers=headers)
-        
+
         if response.status_code not in [200, 201]:
             error_msg = f"Shopify API error completing draft order: {response.status_code} - {response.text}"
             current_app.logger.error(error_msg)
             raise Exception(error_msg)
-        
+
         order = response.json()
         current_app.logger.info(f"Successfully completed draft order {draft_order_id} to order: {order.get('draft_order', {}).get('order_id')}")
-        
+
         return order
+
+    def fulfill_order(self, order_id):
+        """
+        Fulfill an order in Shopify
+
+        Args:
+            order_id (int): Order ID to fulfill
+
+        Returns:
+            dict: Fulfillment response
+        """
+        self._get_config()
+
+        # First, get the order to retrieve line items
+        order_url = self._get_api_url(f'orders/{order_id}.json')
+        headers = self._get_headers()
+
+        current_app.logger.info(f"Retrieving order details for fulfillment: {order_id}")
+
+        response = requests.get(order_url, headers=headers)
+
+        if response.status_code not in [200, 201]:
+            error_msg = f"Shopify API error retrieving order: {response.status_code} - {response.text}"
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
+
+        order = response.json().get('order', {})
+
+        # Get all line items for fulfillment
+        line_items = []
+        for item in order.get('line_items', []):
+            line_items.append({
+                "id": item['id'],
+                "quantity": item['quantity']
+            })
+
+        # Create fulfillment payload
+        payload = {
+            "fulfillment": {
+                "line_items": line_items,
+                "notify_customer": False
+            }
+        }
+
+        # Create fulfillment
+        fulfillment_url = self._get_api_url(f'orders/{order_id}/fulfillments.json')
+
+        current_app.logger.info(f"Fulfilling Shopify order: {order_id}")
+
+        response = requests.post(fulfillment_url, json=payload, headers=headers)
+
+        if response.status_code not in [200, 201]:
+            error_msg = f"Shopify API error fulfilling order: {response.status_code} - {response.text}"
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
+
+        fulfillment = response.json()
+        current_app.logger.info(f"Successfully fulfilled order: {order_id}")
+
+        return fulfillment
 
     def create_order(self, sku, title, quantity, per_unit_price, shipping_charges,
                     customer_name, customer_phone, customer_address):
@@ -229,6 +289,7 @@ class ShopifyService:
         1. Finds or creates a customer in Shopify by phone number
         2. Creates a draft order with tax-inclusive pricing
         3. Immediately completes the draft order
+        4. Fulfills the order
 
         Args:
             sku (str): Product SKU
@@ -241,7 +302,7 @@ class ShopifyService:
             customer_address (dict): Customer address
 
         Returns:
-            dict: Response containing both draft_order and order information
+            dict: Response containing draft_order, order, customer, and fulfillment information
         """
         # Find or create customer by phone number
         customer = self.find_or_create_customer(
@@ -270,10 +331,23 @@ class ShopifyService:
         # Complete the draft order
         completed_order = self.complete_draft_order(draft_order_id)
 
+        # Get the order ID from the completed draft order
+        order_id = completed_order.get('draft_order', {}).get('order_id')
+
+        # Fulfill the order
+        fulfillment = None
+        if order_id:
+            try:
+                fulfillment = self.fulfill_order(order_id)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to fulfill order {order_id}: {str(e)}")
+                # Continue even if fulfillment fails
+
         return {
             'draft_order': draft_order_response['draft_order'],
             'order': completed_order.get('draft_order', {}),
-            'customer': customer
+            'customer': customer,
+            'fulfillment': fulfillment
         }
 
 
