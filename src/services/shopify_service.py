@@ -40,8 +40,81 @@ class ShopifyService:
         base_url = self.store_url.rstrip('/')
         return f"{base_url}/admin/api/{self.api_version}/{endpoint}"
 
+    def find_or_create_customer(self, customer_name, customer_phone, customer_address):
+        """
+        Find existing customer by phone number or create a new one in Shopify
+
+        Args:
+            customer_name (str): Customer name
+            customer_phone (str): Customer phone number
+            customer_address (dict): Customer address with fields:
+                - address1 (str): Street address
+                - city (str): City
+                - province (str): State/Province
+                - country (str): Country
+                - zip (str): Postal/ZIP code
+
+        Returns:
+            dict: Shopify customer object
+        """
+        self._get_config()
+
+        # Search for existing customer by phone number
+        search_url = self._get_api_url(f'customers/search.json?query=phone:{customer_phone}')
+        headers = self._get_headers()
+
+        current_app.logger.info(f"Searching for existing customer with phone: {customer_phone}")
+
+        response = requests.get(search_url, headers=headers)
+
+        if response.status_code == 200:
+            customers = response.json().get('customers', [])
+            if customers:
+                customer = customers[0]
+                current_app.logger.info(f"Found existing customer: {customer.get('id')}")
+                return customer
+
+        # Customer not found, create new one
+        current_app.logger.info(f"Customer not found, creating new customer with phone: {customer_phone}")
+
+        first_name = customer_name.split()[0] if customer_name else ""
+        last_name = " ".join(customer_name.split()[1:]) if len(customer_name.split()) > 1 else ""
+
+        payload = {
+            "customer": {
+                "first_name": first_name,
+                "last_name": last_name,
+                "phone": customer_phone,
+                "addresses": [
+                    {
+                        "address1": customer_address.get('address1', ''),
+                        "city": customer_address.get('city', ''),
+                        "province": customer_address.get('province', ''),
+                        "country": customer_address.get('country', ''),
+                        "zip": customer_address.get('zip', ''),
+                        "phone": customer_phone,
+                        "first_name": first_name,
+                        "last_name": last_name
+                    }
+                ]
+            }
+        }
+
+        create_url = self._get_api_url('customers.json')
+        response = requests.post(create_url, json=payload, headers=headers)
+
+        if response.status_code not in [200, 201]:
+            error_msg = f"Shopify API error creating customer: {response.status_code} - {response.text}"
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
+
+        customer = response.json().get('customer', {})
+        current_app.logger.info(f"Successfully created customer: {customer.get('id')}")
+
+        return customer
+
     def create_draft_order(self, sku, title, quantity, per_unit_price, shipping_charges,
-                          customer_name, customer_phone, customer_address):
+                          customer_id, customer_name, customer_phone, customer_address):
         """
         Create a draft order in Shopify
 
@@ -49,8 +122,9 @@ class ShopifyService:
             sku (str): Product SKU
             title (str): Product title
             quantity (int): Quantity to order
-            per_unit_price (float): Price per unit
+            per_unit_price (float): Price per unit (tax-inclusive)
             shipping_charges (float): Shipping charges
+            customer_id (int): Shopify customer ID
             customer_name (str): Customer name
             customer_phone (str): Customer phone number
             customer_address (dict): Customer address with fields:
@@ -73,13 +147,12 @@ class ShopifyService:
                         "title": title,
                         "sku": sku,
                         "quantity": quantity,
-                        "price": str(per_unit_price)
+                        "price": str(per_unit_price),
+                        "taxable": False  # Mark as non-taxable since price is tax-inclusive
                     }
                 ],
                 "customer": {
-                    "first_name": customer_name.split()[0] if customer_name else "",
-                    "last_name": " ".join(customer_name.split()[1:]) if len(customer_name.split()) > 1 else "",
-                    "phone": customer_phone
+                    "id": customer_id
                 },
                 "shipping_address": {
                     "first_name": customer_name.split()[0] if customer_name else "",
@@ -93,7 +166,8 @@ class ShopifyService:
                 },
                 "shipping_line": {
                     "title": "Standard Shipping",
-                    "price": str(shipping_charges)
+                    "price": str(shipping_charges),
+                    "taxable": False  # Mark shipping as non-taxable as well
                 },
                 "use_customer_default_address": False
             }
@@ -151,13 +225,16 @@ class ShopifyService:
         """
         Create and complete an order in Shopify
 
-        This is a convenience method that creates a draft order and immediately completes it.
+        This is a convenience method that:
+        1. Finds or creates a customer in Shopify by phone number
+        2. Creates a draft order with tax-inclusive pricing
+        3. Immediately completes the draft order
 
         Args:
             sku (str): Product SKU
             title (str): Product title
             quantity (int): Quantity to order
-            per_unit_price (float): Price per unit
+            per_unit_price (float): Price per unit (tax-inclusive)
             shipping_charges (float): Shipping charges
             customer_name (str): Customer name
             customer_phone (str): Customer phone number
@@ -166,6 +243,15 @@ class ShopifyService:
         Returns:
             dict: Response containing both draft_order and order information
         """
+        # Find or create customer by phone number
+        customer = self.find_or_create_customer(
+            customer_name=customer_name,
+            customer_phone=customer_phone,
+            customer_address=customer_address
+        )
+
+        customer_id = customer.get('id')
+
         # Create draft order
         draft_order_response = self.create_draft_order(
             sku=sku,
@@ -173,19 +259,21 @@ class ShopifyService:
             quantity=quantity,
             per_unit_price=per_unit_price,
             shipping_charges=shipping_charges,
+            customer_id=customer_id,
             customer_name=customer_name,
             customer_phone=customer_phone,
             customer_address=customer_address
         )
-        
+
         draft_order_id = draft_order_response['draft_order']['id']
-        
+
         # Complete the draft order
         completed_order = self.complete_draft_order(draft_order_id)
-        
+
         return {
             'draft_order': draft_order_response['draft_order'],
-            'order': completed_order.get('draft_order', {})
+            'order': completed_order.get('draft_order', {}),
+            'customer': customer
         }
 
 

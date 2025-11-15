@@ -16,13 +16,14 @@ place_order_schema = PlaceOrderSchema()
 def place_order():
     """
     Place an order on Shopify and reduce inventory
-    
+
     This endpoint:
     1. Validates the order request
     2. Checks if the product exists and has sufficient inventory
-    3. Reduces the inventory in the database
-    4. Creates an order in Shopify
-    
+    3. Finds or creates customer in Shopify by phone number
+    4. Creates an order in Shopify with tax-inclusive pricing
+    5. Reduces the inventory in the database
+
     Request Body:
         {
             "sku": "ELEC-0001-0124",
@@ -39,7 +40,7 @@ def place_order():
                 "zip": "10001"
             }
         }
-    
+
     Response:
         {
             "success": true,
@@ -53,7 +54,8 @@ def place_order():
                 },
                 "shopify_order": {
                     "draft_order": {...},
-                    "order": {...}
+                    "order": {...},
+                    "customer": {...}
                 }
             }
         }
@@ -126,14 +128,10 @@ def place_order():
         # Commit inventory reduction
         db.session.commit()
 
-        # Get updated product data
-        product_data = product.to_dict(include_category_details=True, include_images=False)
-
         return jsonify({
             'success': True,
             'message': 'Order placed successfully',
             'data': {
-                'product': product_data,
                 'shopify_order': shopify_order
             }
         }), 201

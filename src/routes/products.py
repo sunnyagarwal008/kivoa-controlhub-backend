@@ -1346,6 +1346,69 @@ def generate_product_image(product_id):
         }), 500
 
 
+@products_bp.route('/products/<int:product_id>/retry-image-generation', methods=['POST'])
+def retry_image_generation(product_id):
+    """
+    Retry image generation for a product by sending it to SQS queue
+
+    Request Body (optional):
+        {
+            "prompt_type": "model_hand"  # Optional prompt type for AI image generation
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Product queued for image generation",
+            "data": {
+                "product_id": 1,
+                "prompt_type": "model_hand"
+            }
+        }
+    """
+    try:
+        # Get product and verify it exists
+        product = Product.query.get_or_404(product_id)
+
+        # Validate product has a raw_image URL
+        if not product.raw_image:
+            return jsonify({
+                'success': False,
+                'error': 'Product does not have a raw_image URL'
+            }), 400
+
+        # Get request body (optional)
+        data = request.get_json() or {}
+        prompt_type = data.get('prompt_type')
+
+        # Send message to SQS queue
+        try:
+            sqs_service.send_message(product_id, prompt_type)
+            current_app.logger.info(f"Queued product {product_id} for image generation with prompt_type: {prompt_type}")
+        except Exception as e:
+            current_app.logger.error(f"Failed to send product_id {product_id} to SQS: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': f'Failed to queue product for image generation: {str(e)}'
+            }), 500
+
+        return jsonify({
+            'success': True,
+            'message': 'Product queued for image generation',
+            'data': {
+                'product_id': product_id,
+                'prompt_type': prompt_type
+            }
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error retrying image generation for product {product_id}: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @products_bp.route('/products/<int:product_id>/images/update-priorities', methods=['PUT'])
 def update_product_image_priorities(product_id):
     """
