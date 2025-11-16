@@ -39,6 +39,71 @@ def _validate_sort_parameters(sort_by, sort_order):
     return True, None
 
 
+def _build_products_query_for_update(status=None, category_name=None, tags_param=None,
+                                     exclude_out_of_stock=False, min_price=None, max_price=None,
+                                     box_number=None, flagged=None, min_discount=None, max_discount=None):
+    """
+    Build a SQLAlchemy query for bulk updates (without joins or eager loading)
+
+    Args:
+        status: Filter by product status
+        category_name: Filter by category name
+        tags_param: Comma-separated tags to filter by
+        exclude_out_of_stock: Whether to exclude out of stock products
+        min_price: Minimum price filter
+        max_price: Maximum price filter
+        box_number: Filter by box number
+        flagged: Filter by flagged status (True/False)
+        min_discount: Minimum discount percentage filter
+        max_discount: Maximum discount percentage filter
+
+    Returns:
+        SQLAlchemy query object suitable for bulk updates
+    """
+    # Start with a simple query (no joins, no eager loading)
+    query = Product.query
+
+    # Apply filters
+    if status:
+        query = query.filter(Product.status == status)
+
+    if category_name:
+        # Use a subquery to filter by category name without joining
+        category_subquery = db.session.query(Category.id).filter(Category.name == category_name).scalar_subquery()
+        query = query.filter(Product.category_id.in_(category_subquery))
+
+    if tags_param:
+        # Split comma-separated tags and filter products that contain any of the tags
+        tags_list = [tag.strip() for tag in tags_param.split(',') if tag.strip()]
+        if tags_list:
+            # Build OR condition for each tag
+            tag_filters = [Product.tags.like(f'%{tag}%') for tag in tags_list]
+            query = query.filter(db.or_(*tag_filters))
+
+    if exclude_out_of_stock:
+        query = query.filter(Product.inventory > 0)
+
+    if min_price is not None:
+        query = query.filter(Product.price >= min_price)
+
+    if max_price is not None:
+        query = query.filter(Product.price <= max_price)
+
+    if box_number is not None:
+        query = query.filter(Product.box_number == box_number)
+
+    if flagged is not None:
+        query = query.filter(Product.flagged == flagged)
+
+    if min_discount is not None:
+        query = query.filter(Product.discount >= min_discount)
+
+    if max_discount is not None:
+        query = query.filter(Product.discount <= max_discount)
+
+    return query
+
+
 def _build_products_query(status=None, category_name=None, tags_param=None,
                          exclude_out_of_stock=False, min_price=None, max_price=None,
                          box_number=None, flagged=None, min_discount=None, max_discount=None,
@@ -594,8 +659,8 @@ def apply_discount_to_filtered_products():
         # Extract filter parameters from request body
         filter_params = _extract_filter_params_from_body(data)
 
-        # Build query using common method (without sorting)
-        query = _build_products_query(
+        # Build query for bulk update (without joins or eager loading)
+        query = _build_products_query_for_update(
             status=filter_params['status'],
             category_name=filter_params['category'],
             tags_param=filter_params['tags'],
@@ -605,16 +670,10 @@ def apply_discount_to_filtered_products():
             box_number=filter_params['boxNumber'],
             flagged=filter_params['flagged'],
             min_discount=filter_params['minDiscount'],
-            max_discount=filter_params['maxDiscount'],
-            sort_by='created_at',
-            sort_order='desc'
+            max_discount=filter_params['maxDiscount']
         )
 
         current_app.logger.info(f"Applying {discount}% discount to matching products")
-
-        # Remove order_by() from query before calling update()
-        # Query.update() cannot be called when order_by() has been applied
-        query = query.order_by(None)
 
         # Use bulk update with SQL expression to:
         # 1. Set discount field to the percentage value
