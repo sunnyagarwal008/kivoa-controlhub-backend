@@ -74,7 +74,8 @@ def _validate_sort_parameters(sort_by, sort_order):
 
 def _build_products_query(status=None, category_name=None, tags_param=None,
                          exclude_out_of_stock=False, min_price=None, max_price=None,
-                         box_number=None, flagged=None, sort_by='created_at', sort_order='desc'):
+                         box_number=None, flagged=None, min_discount=None, max_discount=None,
+                         sort_by='created_at', sort_order='desc'):
     """
     Build a SQLAlchemy query for products with filters and sorting
 
@@ -87,6 +88,8 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
         max_price: Maximum price filter
         box_number: Filter by box number
         flagged: Filter by flagged status (True/False)
+        min_discount: Minimum discount percentage filter
+        max_discount: Maximum discount percentage filter
         sort_by: Field to sort by (default: created_at)
         sort_order: Sort order - 'asc' or 'desc' (default: desc)
 
@@ -132,6 +135,12 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
 
     if flagged is not None:
         query = query.filter(Product.flagged == flagged)
+
+    if min_discount is not None:
+        query = query.filter(Product.discount >= min_discount)
+
+    if max_discount is not None:
+        query = query.filter(Product.discount <= max_discount)
 
     # Apply sorting
     sort_column = getattr(Product, sort_by)
@@ -399,6 +408,8 @@ def get_products():
         - maxPrice: Filter products with price <= maxPrice
         - boxNumber: Filter by box number (integer)
         - flagged: Filter by flagged status (true/false)
+        - minDiscount: Filter products with discount >= minDiscount
+        - maxDiscount: Filter products with discount <= maxDiscount
         - sortBy: Sort field (sku_sequence_number, price) (default: created_at)
         - sortOrder: Sort order (asc, desc) (default: desc)
         - page: Page number (default: 1)
@@ -429,6 +440,8 @@ def get_products():
         flagged = None
         if flagged_param is not None:
             flagged = flagged_param.lower() == 'true'
+        min_discount = request.args.get('minDiscount', type=float)
+        max_discount = request.args.get('maxDiscount', type=float)
         sort_by = request.args.get('sortBy', 'created_at')
         sort_order = request.args.get('sortOrder', 'desc').lower()
         page = request.args.get('page', 1, type=int)
@@ -452,6 +465,8 @@ def get_products():
             max_price=max_price,
             box_number=box_number,
             flagged=flagged,
+            min_discount=min_discount,
+            max_discount=max_discount,
             sort_by=sort_by,
             sort_order=sort_order
         )

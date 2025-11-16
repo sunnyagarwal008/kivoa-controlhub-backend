@@ -41,7 +41,8 @@ def _validate_sort_parameters(sort_by, sort_order):
 
 def _build_products_query(status=None, category_name=None, tags_param=None,
                          exclude_out_of_stock=False, min_price=None, max_price=None,
-                         box_number=None, flagged=None, sort_by='created_at', sort_order='desc'):
+                         box_number=None, flagged=None, min_discount=None, max_discount=None,
+                         sort_by='created_at', sort_order='desc'):
     """
     Build a SQLAlchemy query for products with filters and sorting
 
@@ -54,6 +55,8 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
         max_price: Maximum price filter
         box_number: Filter by box number
         flagged: Filter by flagged status (True/False)
+        min_discount: Minimum discount percentage filter
+        max_discount: Maximum discount percentage filter
         sort_by: Field to sort by (default: created_at)
         sort_order: Sort order - 'asc' or 'desc' (default: desc)
 
@@ -100,6 +103,12 @@ def _build_products_query(status=None, category_name=None, tags_param=None,
     if flagged is not None:
         query = query.filter(Product.flagged == flagged)
 
+    if min_discount is not None:
+        query = query.filter(Product.discount >= min_discount)
+
+    if max_discount is not None:
+        query = query.filter(Product.discount <= max_discount)
+
     # Apply sorting
     sort_column = getattr(Product, sort_by)
     if sort_order == 'asc':
@@ -134,6 +143,8 @@ def _extract_filter_params(request_args):
         'maxPrice': request_args.get('maxPrice', type=float),
         'boxNumber': request_args.get('boxNumber', type=int),
         'flagged': flagged,
+        'minDiscount': request_args.get('minDiscount', type=float),
+        'maxDiscount': request_args.get('maxDiscount', type=float),
         'sortBy': request_args.get('sortBy', 'created_at'),
         'sortOrder': request_args.get('sortOrder', 'desc').lower()
     }
@@ -158,6 +169,8 @@ def _extract_filter_params_from_body(data):
         'maxPrice': data.get('maxPrice'),
         'boxNumber': data.get('boxNumber'),
         'flagged': data.get('flagged'),
+        'minDiscount': data.get('minDiscount'),
+        'maxDiscount': data.get('maxDiscount'),
         'sortBy': data.get('sortBy', 'created_at'),
         'sortOrder': data.get('sortOrder', 'desc').lower()
     }
@@ -191,6 +204,8 @@ def _generate_catalog_pdf(filter_params):
         max_price=filter_params['maxPrice'],
         box_number=filter_params['boxNumber'],
         flagged=filter_params['flagged'],
+        min_discount=filter_params['minDiscount'],
+        max_discount=filter_params['maxDiscount'],
         sort_by=filter_params['sortBy'],
         sort_order=filter_params['sortOrder']
     )
@@ -504,6 +519,140 @@ def delete_catalog(catalog_id):
 
 
 
+@catalogs_bp.route('/catalogs/apply-discount', methods=['POST'])
+def apply_discount_to_filtered_products():
+    """
+    Apply a percentage discount to all products matching the specified filters
+
+    This endpoint:
+    1. Accepts filter parameters similar to generate_product_catalog API
+    2. Accepts a discount percentage value
+    3. Filters products based on provided parameters
+    4. Updates the discount field with the percentage value
+    5. Recalculates the price field as: price = mrp - (mrp × discount / 100)
+    6. Returns the count of updated products
+
+    Request Body:
+        {
+            "discount": 20,  // required - Discount percentage (0-100)
+            "status": "live",  // optional - Filter by status (e.g., pending, live, rejected)
+            "category": "Electronics",  // optional - Filter by category name
+            "tags": "wireless,bluetooth",  // optional - Filter by tags (comma-separated)
+            "excludeOutOfStock": false,  // optional - Filter out products that are out of stock
+            "minPrice": 10.0,  // optional - Filter products with price >= minPrice
+            "maxPrice": 100.0,  // optional - Filter products with price <= maxPrice
+            "boxNumber": 1,  // optional - Filter by box number (integer)
+            "flagged": false,  // optional - Filter by flagged status
+            "minDiscount": 0,  // optional - Filter products with discount >= minDiscount
+            "maxDiscount": 50  // optional - Filter products with discount <= maxDiscount
+        }
+
+    Response:
+        {
+            "success": true,
+            "message": "Discount of 20% applied successfully to 50 products",
+            "data": {
+                "updated_count": 50,
+                "discount_percentage": 20
+            }
+        }
+    """
+    try:
+        # Get request body
+        data = request.get_json()
+        if not data:
+            error_msg = 'Request body is required'
+            current_app.logger.error(f"Apply discount failed: {error_msg}")
+            return jsonify({
+                'success': False,
+                'error': error_msg
+            }), 400
+
+        # Get discount parameter
+        discount = data.get('discount')
+        if discount is None:
+            error_msg = 'Missing required field: discount'
+            current_app.logger.error(f"Apply discount failed: {error_msg}")
+            return jsonify({
+                'success': False,
+                'error': error_msg
+            }), 400
+
+        # Validate discount value
+        try:
+            discount = float(discount)
+            if discount < 0 or discount > 100:
+                raise ValueError('Discount percentage must be between 0 and 100')
+        except (ValueError, TypeError) as e:
+            error_msg = f'Invalid discount value: {str(e)}'
+            current_app.logger.error(f"Apply discount failed: {error_msg}")
+            return jsonify({
+                'success': False,
+                'error': error_msg
+            }), 400
+
+        # Extract filter parameters from request body
+        filter_params = _extract_filter_params_from_body(data)
+
+        # Build query using common method (without sorting)
+        query = _build_products_query(
+            status=filter_params['status'],
+            category_name=filter_params['category'],
+            tags_param=filter_params['tags'],
+            exclude_out_of_stock=filter_params['excludeOutOfStock'],
+            min_price=filter_params['minPrice'],
+            max_price=filter_params['maxPrice'],
+            box_number=filter_params['boxNumber'],
+            flagged=filter_params['flagged'],
+            min_discount=filter_params['minDiscount'],
+            max_discount=filter_params['maxDiscount'],
+            sort_by='created_at',
+            sort_order='desc'
+        )
+
+        current_app.logger.info(f"Applying {discount}% discount to matching products")
+
+        # Use bulk update with SQL expression to:
+        # 1. Set discount field to the percentage value
+        # 2. Recalculate price as: mrp - (mrp * discount / 100)
+        updated_count = query.update(
+            {
+                Product.discount: discount,
+                Product.price: Product.mrp - (Product.mrp * (discount / 100))
+            },
+            synchronize_session=False
+        )
+
+        if updated_count == 0:
+            error_msg = 'No products found matching the specified filters'
+            current_app.logger.warning(f"Apply discount: {error_msg}")
+            return jsonify({
+                'success': False,
+                'error': error_msg
+            }), 400
+
+        db.session.commit()
+
+        current_app.logger.info(f"Successfully applied {discount}% discount to {updated_count} products")
+
+        return jsonify({
+            'success': True,
+            'message': f'Discount of {discount}% applied successfully to {updated_count} products',
+            'data': {
+                'updated_count': updated_count,
+                'discount_percentage': discount
+            }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error applying discount: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @catalogs_bp.route('/catalogs/shopify-export', methods=['GET'])
 def export_shopify_csv():
     """
@@ -554,6 +703,8 @@ def export_shopify_csv():
             max_price=filter_params['maxPrice'],
             box_number=filter_params['boxNumber'],
             flagged=filter_params['flagged'],
+            min_discount=filter_params['minDiscount'],
+            max_discount=filter_params['maxDiscount'],
             sort_by=filter_params['sortBy'],
             sort_order=filter_params['sortOrder']
         )
