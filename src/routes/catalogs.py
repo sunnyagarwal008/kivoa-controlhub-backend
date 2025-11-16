@@ -612,6 +612,10 @@ def apply_discount_to_filtered_products():
 
         current_app.logger.info(f"Applying {discount}% discount to matching products")
 
+        # Remove order_by() from query before calling update()
+        # Query.update() cannot be called when order_by() has been applied
+        query = query.order_by(None)
+
         # Use bulk update with SQL expression to:
         # 1. Set discount field to the percentage value
         # 2. Recalculate price as: mrp - (mrp * discount / 100)
