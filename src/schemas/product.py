@@ -39,7 +39,7 @@ class ProductImageSchema(Schema):
     image_url = fields.Str(required=True, validate=validate.Length(min=1, max=500))
     status = fields.Str(dump_only=True)
     priority = fields.Int(required=False, load_default=0)
-    prompt_type = fields.Str(required=False, allow_none=True, validate=validate.Length(max=100))
+    prompt_id = fields.Int(required=False, allow_none=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
@@ -59,7 +59,7 @@ class ProductSchema(Schema):
     purchase_month = fields.Str(required=True, validate=validate.Length(equal=4))
     raw_image = fields.Str(required=True, validate=validate.Length(min=1, max=500))
     is_raw_image = fields.Bool(required=False, load_default=True)  # Flag to indicate if raw_image needs AI processing
-    prompt_type = fields.Str(required=False, allow_none=True, validate=validate.Length(max=100))  # Optional prompt type for AI image generation
+    prompt_id = fields.Int(required=False, allow_none=True)  # Optional prompt ID for AI image generation
     title = fields.Str(required=False, allow_none=True, validate=validate.Length(max=255))
     description = fields.Str(required=False, allow_none=True)
     handle = fields.Str(required=False, allow_none=True, validate=validate.Length(max=255))

@@ -149,9 +149,12 @@ class ProductImage(db.Model):
     image_url = db.Column(db.String(500), nullable=False)
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending, approved, rejected
     priority = db.Column(db.Integer, nullable=False, default=0)  # Lower number = higher priority
-    prompt_type = db.Column(db.String(100), nullable=True)  # e.g., 'model_hand', 'satin', 'mirror' - prompt type used for AI generation
+    prompt_id = db.Column(db.Integer, db.ForeignKey('prompts.id'), nullable=True)  # Reference to the prompt used for AI generation
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship with Prompt
+    prompt = db.relationship('Prompt', backref='product_images', lazy=True)
 
     def __repr__(self):
         return f'<ProductImage {self.id} - Product {self.product_id}>'
@@ -164,7 +167,7 @@ class ProductImage(db.Model):
             'image_url': self.image_url,
             'status': self.status,
             'priority': self.priority,
-            'prompt_type': self.prompt_type,
+            'prompt_id': self.prompt_id,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

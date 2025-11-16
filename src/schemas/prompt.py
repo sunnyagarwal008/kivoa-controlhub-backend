@@ -13,6 +13,7 @@ class PromptSchema(Schema):
     type = fields.Str(allow_none=True, validate=validate.Length(max=100))
     tags = fields.Str(allow_none=True, validate=validate.Length(max=500))
     is_active = fields.Bool(load_default=True)
+    is_default = fields.Bool(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 

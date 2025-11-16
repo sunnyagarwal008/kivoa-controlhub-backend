@@ -11,7 +11,7 @@ import time
 from flask import current_app
 
 from src.database import db
-from src.models import Product, ProductImage
+from src.models import Product, ProductImage, Prompt
 from src.services import sqs_service, gemini_service, s3_service
 from src.services.gemini_service import download_image
 from src.utils.raw_image_utils import delete_raw_image_by_url
@@ -29,14 +29,14 @@ class WorkerThread(threading.Thread):
         """Stop the worker thread"""
         self.running = False
     
-    def process_product(self, product_id, prompt_type=None):
+    def process_product(self, product_id, prompt_id=None):
         """
         Process a single product: fetch from DB, generate enhanced images,
         upload to S3, save to product_images table, update product status
 
         Args:
             product_id: ID of the product to process
-            prompt_type: Optional prompt type for AI image generation
+            prompt_id: Optional prompt ID for AI image generation
         """
         with self.app.app_context():
             try:
@@ -50,7 +50,7 @@ class WorkerThread(threading.Thread):
                 # Get category name from relationship
                 category_name = product.category_ref.name if product.category_ref else 'default'
 
-                current_app.logger.info(f"Processing product {product_id} - {category_name} with prompt_type: {prompt_type}")
+                current_app.logger.info(f"Processing product {product_id} - {category_name} with prompt_id: {prompt_id}")
 
                 # Download the raw image
                 raw_image = download_image(product.raw_image)
@@ -58,7 +58,47 @@ class WorkerThread(threading.Thread):
                 # Get the configured number of enhanced images to generate
                 ai_images_count = current_app.config['ENHANCED_IMAGES_COUNT']
 
-                ai_images = gemini_service.generate_images(raw_image, category_name, ai_images_count, prompt_type)
+                # Determine which prompt to use
+                prompt_obj = None
+
+                if prompt_id:
+                    # Use the specific prompt provided
+                    prompt_obj = Prompt.query.filter(
+                        Prompt.id == prompt_id,
+                        Prompt.is_active == True
+                    ).first()
+
+                    if not prompt_obj:
+                        current_app.logger.error(f"Prompt {prompt_id} not found or inactive")
+                        return False
+                else:
+                    # Check if there's a default prompt for this category
+                    prompt_obj = Prompt.query.filter(
+                        Prompt.category_id == product.category_id,
+                        Prompt.is_default == True,
+                        Prompt.is_active == True
+                    ).first()
+
+                    if prompt_obj:
+                        current_app.logger.info(f"Using default prompt {prompt_obj.id} for category {category_name}")
+                        prompt_id = prompt_obj.id  # Store the prompt_id for later use
+
+                # Generate images
+                if prompt_obj:
+                    # Generate all images with the specific prompt
+                    ai_images = []
+                    for i in range(1, ai_images_count + 1):
+                        base_name = os.path.splitext(os.path.basename(raw_image))[0]
+                        extension = os.path.splitext(raw_image)[1]
+                        output_image_name = f"{base_name}-0{i}{extension}"
+                        output_file = os.path.join("/tmp", output_image_name)
+                        gemini_service._do_generate_image(raw_image, output_file, prompt_obj.text)
+                        ai_images.append(output_file)
+                else:
+                    # No specific prompt and no default - use random selection from category prompts
+                    current_app.logger.info(f"No default prompt found for category {category_name}, using random selection")
+                    ai_images = gemini_service.generate_images(raw_image, category_name, ai_images_count, None)
+
                 created_image_urls = []
 
                 # Generate enhanced images
@@ -76,12 +116,12 @@ class WorkerThread(threading.Thread):
                     current_app.logger.info(f"Created enhanced images for product {product_id}: {image_url}")
 
                 for image_url in created_image_urls:
-                    # Save to product_images table with prompt_type
+                    # Save to product_images table with prompt_id
                     product_image = ProductImage(
                         product_id=product_id,
                         image_url=image_url,
                         status='pending',
-                        prompt_type=prompt_type
+                        prompt_id=prompt_id
                     )
                     db.session.add(product_image)
 
@@ -127,17 +167,17 @@ class WorkerThread(threading.Thread):
                             # Parse message body
                             body = json.loads(message['Body'])
                             product_id = body.get('product_id')
-                            prompt_type = body.get('prompt_type')
+                            prompt_id = body.get('prompt_id')
 
                             if not product_id:
                                 current_app.logger.error(f"Invalid message format: {message['Body']}")
                                 sqs_service.delete_message(message['ReceiptHandle'])
                                 continue
 
-                            current_app.logger.info(f"Received message for product_id: {product_id}, prompt_type: {prompt_type}")
+                            current_app.logger.info(f"Received message for product_id: {product_id}, prompt_id: {prompt_id}")
 
                             # Process the product
-                            success = self.process_product(product_id, prompt_type)
+                            success = self.process_product(product_id, prompt_id)
 
                             if success:
                                 # Delete message from queue after successful processing

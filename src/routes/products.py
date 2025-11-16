@@ -197,8 +197,8 @@ def bulk_create_products():
             # Check if this is a raw image that needs AI processing
             is_raw_image = validated_data.get('is_raw_image', True)
 
-            # Get optional prompt_type for AI image generation
-            prompt_type = validated_data.get('prompt_type')
+            # Get optional prompt_id for AI image generation
+            prompt_id = validated_data.get('prompt_id')
 
             # Set status based on is_raw_image flag
             # If is_raw_image is True, status is 'pending' (needs AI processing)
@@ -236,7 +236,7 @@ def bulk_create_products():
             if is_raw_image:
                 product_ids_for_queue.append({
                     'id': product.id,
-                    'prompt_type': prompt_type
+                    'prompt_id': prompt_id
                 })
             else:
                 products_for_direct_upload.append({
@@ -286,7 +286,7 @@ def bulk_create_products():
         # Send products with is_raw_image=True to SQS queue for AI processing
         for product_info in product_ids_for_queue:
             try:
-                sqs_service.send_message(product_info['id'], product_info['prompt_type'])
+                sqs_service.send_message(product_info['id'], product_info['prompt_id'])
             except Exception as e:
                 # Log the error but don't fail the entire request
                 # The products are already created
@@ -1224,7 +1224,7 @@ def generate_product_image(product_id):
 
     Request Body:
         {
-            "prompt_type": "model_hand",  # Optional type filter for prompts (e.g., 'model_hand', 'satin', 'mirror')
+            "prompt_id": 123,  # Optional prompt ID to use for image generation
             "prompt_text": "custom prompt"  # Optional custom prompt text. If provided, this will be used instead of DB prompts
         }
 
@@ -1251,41 +1251,50 @@ def generate_product_image(product_id):
 
         # Get request body
         data = request.get_json() or {}
-        prompt_type = data.get('prompt_type')
+        prompt_id = data.get('prompt_id')
         prompt_text = data.get('prompt_text')
 
         # Determine which prompt to use
+        selected_prompt_obj = None
         if prompt_text:
             # Use the provided custom prompt
             selected_prompt = prompt_text
             current_app.logger.info(f"Using custom prompt for product {product_id}")
+        elif prompt_id:
+            # Get specific prompt by ID
+            selected_prompt_obj = Prompt.query.filter(
+                Prompt.id == prompt_id,
+                Prompt.is_active == True
+            ).first()
+
+            if not selected_prompt_obj:
+                return jsonify({
+                    'success': False,
+                    'error': f'Prompt with ID {prompt_id} not found or is inactive'
+                }), 404
+
+            selected_prompt = selected_prompt_obj.text
+            current_app.logger.info(f"Using prompt ID {prompt_id} for product {product_id}")
         else:
-            # Get prompts from database based on product category and type
+            # No prompt_id or prompt_text provided - randomly select from category prompts
             category_name = product.category_ref.name if product.category_ref else 'default'
 
-            # Query prompts from database
-            query = Prompt.query.filter(
+            # Query prompts from database based on product category
+            prompts = Prompt.query.filter(
                 Prompt.category_id == product.category_id,
                 Prompt.is_active == True
-            )
-
-            # Filter by type if provided
-            if prompt_type:
-                query = query.filter(Prompt.type == prompt_type)
-
-            prompts = query.all()
+            ).all()
 
             if not prompts:
                 return jsonify({
                     'success': False,
-                    'error': f'No prompts found for category "{category_name}"' +
-                            (f' and type "{prompt_type}"' if prompt_type else '')
+                    'error': f'No prompts found for category "{category_name}"'
                 }), 404
 
             # Randomly select one prompt
             selected_prompt_obj = random.choice(prompts)
             selected_prompt = selected_prompt_obj.text
-            current_app.logger.info(f"total prompts: {len(prompts)}, selected prompt {selected_prompt} for product {product_id}, type: {prompt_type}, category: {category_name}")
+            current_app.logger.info(f"total prompts: {len(prompts)}, randomly selected prompt ID {selected_prompt_obj.id} for product {product_id}, category: {category_name}")
 
         # Validate product has a raw_image URL
         if not product.raw_image:
@@ -1345,7 +1354,7 @@ def generate_product_image(product_id):
             product_id=product_id,
             image_url=image_url,
             status='pending',
-            prompt_type=prompt_type
+            prompt_id=selected_prompt_obj.id if selected_prompt_obj else None
         )
         db.session.add(product_image)
         db.session.commit()
@@ -1383,7 +1392,7 @@ def retry_image_generation(product_id):
 
     Request Body (optional):
         {
-            "prompt_type": "model_hand"  # Optional prompt type for AI image generation
+            "prompt_id": 123  # Optional prompt ID for AI image generation
         }
 
     Response:
@@ -1392,7 +1401,7 @@ def retry_image_generation(product_id):
             "message": "Product queued for image generation",
             "data": {
                 "product_id": 1,
-                "prompt_type": "model_hand"
+                "prompt_id": 123
             }
         }
     """
@@ -1409,12 +1418,12 @@ def retry_image_generation(product_id):
 
         # Get request body (optional)
         data = request.get_json() or {}
-        prompt_type = data.get('prompt_type')
+        prompt_id = data.get('prompt_id')
 
         # Send message to SQS queue
         try:
-            sqs_service.send_message(product_id, prompt_type)
-            current_app.logger.info(f"Queued product {product_id} for image generation with prompt_type: {prompt_type}")
+            sqs_service.send_message(product_id, prompt_id)
+            current_app.logger.info(f"Queued product {product_id} for image generation with prompt_id: {prompt_id}")
         except Exception as e:
             current_app.logger.error(f"Failed to send product_id {product_id} to SQS: {str(e)}")
             return jsonify({
@@ -1427,7 +1436,7 @@ def retry_image_generation(product_id):
             'message': 'Product queued for image generation',
             'data': {
                 'product_id': product_id,
-                'prompt_type': prompt_type
+                'prompt_id': prompt_id
             }
         }), 200
 

@@ -311,6 +311,86 @@ def delete_prompt(prompt_id):
         }), 500
 
 
+@prompts_bp.route('/prompts/<int:prompt_id>/set-default', methods=['POST'])
+def set_default_prompt(prompt_id):
+    """
+    Set a prompt as the default for its category
+    Only one prompt can be default per category
+
+    Response:
+        {
+            "success": true,
+            "message": "Prompt set as default for category 'necklace'",
+            "data": {...}
+        }
+    """
+    try:
+        prompt = Prompt.query.get_or_404(prompt_id)
+
+        # Unset any existing default prompt for this category
+        Prompt.query.filter(
+            Prompt.category_id == prompt.category_id,
+            Prompt.is_default == True,
+            Prompt.id != prompt_id
+        ).update({'is_default': False})
+
+        # Set this prompt as default
+        prompt.is_default = True
+
+        db.session.commit()
+
+        category_name = prompt.category.name if prompt.category else 'Unknown'
+
+        return jsonify({
+            'success': True,
+            'message': f'Prompt set as default for category \'{category_name}\'',
+            'data': prompt.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error setting prompt {prompt_id} as default: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@prompts_bp.route('/prompts/<int:prompt_id>/unset-default', methods=['POST'])
+def unset_default_prompt(prompt_id):
+    """
+    Unset a prompt as the default for its category
+
+    Response:
+        {
+            "success": true,
+            "message": "Prompt unset as default",
+            "data": {...}
+        }
+    """
+    try:
+        prompt = Prompt.query.get_or_404(prompt_id)
+
+        # Unset this prompt as default
+        prompt.is_default = False
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Prompt unset as default',
+            'data': prompt.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error unsetting prompt {prompt_id} as default: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @prompts_bp.route('/prompts/bulk', methods=['POST'])
 def bulk_create_prompts():
     """

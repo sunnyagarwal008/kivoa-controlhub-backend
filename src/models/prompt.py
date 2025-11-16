@@ -13,6 +13,7 @@ class Prompt(db.Model):
     type = db.Column(db.String(100), nullable=True)  # e.g., 'model_hand', 'satin', 'mirror' for rings
     tags = db.Column(db.String(500), nullable=True)  # Comma-separated tags
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    is_default = db.Column(db.Boolean, nullable=False, default=False)  # Only one prompt can be default per category
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -38,6 +39,7 @@ class Prompt(db.Model):
             'type': self.type,
             'tags': self.tags,
             'is_active': self.is_active,
+            'is_default': self.is_default,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

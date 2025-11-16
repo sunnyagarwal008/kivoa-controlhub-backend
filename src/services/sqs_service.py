@@ -21,13 +21,13 @@ class SQSService:
             )
         return self.sqs_client
     
-    def send_message(self, product_id, prompt_type=None):
+    def send_message(self, product_id, prompt_id=None):
         """
         Send a product ID to SQS queue for processing
 
         Args:
             product_id: ID of the product to process
-            prompt_type: Optional prompt type for AI image generation
+            prompt_id: Optional prompt ID for AI image generation
 
         Returns:
             dict: Response from SQS
@@ -40,16 +40,16 @@ class SQSService:
                 'product_id': product_id
             }
 
-            # Include prompt_type if provided
-            if prompt_type:
-                message_body['prompt_type'] = prompt_type
+            # Include prompt_id if provided
+            if prompt_id:
+                message_body['prompt_id'] = prompt_id
 
             response = sqs_client.send_message(
                 QueueUrl=queue_url,
                 MessageBody=json.dumps(message_body)
             )
 
-            current_app.logger.info(f"Sent product_id {product_id} to SQS queue with prompt_type: {prompt_type}")
+            current_app.logger.info(f"Sent product_id {product_id} to SQS queue with prompt_id: {prompt_id}")
             return response
 
         except ClientError as e:
