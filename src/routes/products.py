@@ -229,9 +229,9 @@ def bulk_create_products():
                 tags=validated_data.get('tags'),
                 box_number=validated_data.get('box_number'),
                 weight=validated_data.get('weight'),
-                dimensions_length=validated_data.get('length'),
-                dimensions_breadth=validated_data.get('breadth'),
-                dimensions_height=validated_data.get('height'),
+                dimensions_length=validated_data.get('dimensions_length'),
+                dimensions_breadth=validated_data.get('dimensions_breadth'),
+                dimensions_height=validated_data.get('dimensions_height'),
                 size=validated_data.get('size'),
                 status=status
             )
@@ -567,9 +567,9 @@ def update_product(product_id):
             "tags": "wireless,bluetooth,premium", # Comma-separated tags
             "box_number": 42,                    # Box number (integer)
             "weight": 500,                       # Weight in grams (integer)
-            "dimensions_length": 100,            # Length in mm (integer)
-            "dimensions_breadth": 50,            # Breadth in mm (integer)
-            "dimensions_height": 30,             # Height in mm (integer)
+            "length": 100,                       # Length in mm (integer) - can also use "dimensions_length"
+            "breadth": 50,                       # Breadth in mm (integer) - can also use "dimensions_breadth"
+            "height": 30,                        # Height in mm (integer) - can also use "dimensions_height"
             "size": "Medium"                     # Size (string)
         }
 

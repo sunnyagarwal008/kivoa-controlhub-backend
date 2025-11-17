@@ -1,4 +1,4 @@
-from marshmallow import Schema, fields, validate, validates, ValidationError, EXCLUDE
+from marshmallow import Schema, fields, validate, validates, ValidationError, EXCLUDE, post_load
 import re
 
 
@@ -71,8 +71,14 @@ class ProductSchema(Schema):
     tags = fields.Str(required=False, allow_none=True, validate=validate.Length(max=500))
     box_number = fields.Int(required=False, allow_none=True)
     weight = fields.Int(required=False, allow_none=True)
+    # Accept both 'length' and 'dimensions_length' as input field names
+    length = fields.Int(required=False, allow_none=True, load_only=True)
     dimensions_length = fields.Int(required=False, allow_none=True)
+    # Accept both 'breadth' and 'dimensions_breadth' as input field names
+    breadth = fields.Int(required=False, allow_none=True, load_only=True)
     dimensions_breadth = fields.Int(required=False, allow_none=True)
+    # Accept both 'height' and 'dimensions_height' as input field names
+    height = fields.Int(required=False, allow_none=True, load_only=True)
     dimensions_height = fields.Int(required=False, allow_none=True)
     dimensions = fields.Dict(dump_only=True)
     size = fields.Str(required=False, allow_none=True, validate=validate.Length(max=50))
@@ -115,11 +121,23 @@ class ProductSchema(Schema):
         if value is not None and value <= 0:
             raise ValidationError('Weight must be greater than 0')
 
+    @validates('length')
+    def validate_length(self, value, **kwargs):
+        """Validate length is positive"""
+        if value is not None and value <= 0:
+            raise ValidationError('Length must be greater than 0')
+
     @validates('dimensions_length')
     def validate_dimensions_length(self, value, **kwargs):
         """Validate dimensions_length is positive"""
         if value is not None and value <= 0:
             raise ValidationError('Dimensions length must be greater than 0')
+
+    @validates('breadth')
+    def validate_breadth(self, value, **kwargs):
+        """Validate breadth is positive"""
+        if value is not None and value <= 0:
+            raise ValidationError('Breadth must be greater than 0')
 
     @validates('dimensions_breadth')
     def validate_dimensions_breadth(self, value, **kwargs):
@@ -127,11 +145,34 @@ class ProductSchema(Schema):
         if value is not None and value <= 0:
             raise ValidationError('Dimensions breadth must be greater than 0')
 
+    @validates('height')
+    def validate_height(self, value, **kwargs):
+        """Validate height is positive"""
+        if value is not None and value <= 0:
+            raise ValidationError('Height must be greater than 0')
+
     @validates('dimensions_height')
     def validate_dimensions_height(self, value, **kwargs):
         """Validate dimensions_height is positive"""
         if value is not None and value <= 0:
             raise ValidationError('Dimensions height must be greater than 0')
+
+    @post_load
+    def map_dimension_fields(self, data, **kwargs):
+        """Map short field names (length, breadth, height) to full field names (dimensions_length, etc.)"""
+        # Map length -> dimensions_length if provided
+        if 'length' in data and data['length'] is not None:
+            data['dimensions_length'] = data.pop('length')
+
+        # Map breadth -> dimensions_breadth if provided
+        if 'breadth' in data and data['breadth'] is not None:
+            data['dimensions_breadth'] = data.pop('breadth')
+
+        # Map height -> dimensions_height if provided
+        if 'height' in data and data['height'] is not None:
+            data['dimensions_height'] = data.pop('height')
+
+        return data
 
 
 class RawImageSchema(Schema):
