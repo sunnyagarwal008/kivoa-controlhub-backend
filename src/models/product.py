@@ -71,6 +71,11 @@ class Product(db.Model):
     price_code = db.Column(db.String(20), nullable=True)
     tags = db.Column(db.String(500), nullable=True)
     box_number = db.Column(db.Integer, nullable=True)
+    weight = db.Column(db.Integer, nullable=True)
+    dimensions_length = db.Column(db.Integer, nullable=True)
+    dimensions_breadth = db.Column(db.Integer, nullable=True)
+    dimensions_height = db.Column(db.Integer, nullable=True)
+    size = db.Column(db.String(50), nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending')
     inventory = db.Column(db.Integer, nullable=False, default=1)
     flagged = db.Column(db.Boolean, nullable=False, default=False)
@@ -115,6 +120,13 @@ class Product(db.Model):
             'price_code': self.price_code,
             'tags': self.tags,
             'box_number': self.box_number,
+            'weight': self.weight,
+            'dimensions': {
+                'length': self.dimensions_length,
+                'breadth': self.dimensions_breadth,
+                'height': self.dimensions_height
+            } if any([self.dimensions_length, self.dimensions_breadth, self.dimensions_height]) else None,
+            'size': self.size,
             'status': self.status,
             'in_stock': self.in_stock,
             'flagged': self.flagged,

@@ -228,6 +228,11 @@ def bulk_create_products():
                 price_code=validated_data.get('price_code'),
                 tags=validated_data.get('tags'),
                 box_number=validated_data.get('box_number'),
+                weight=validated_data.get('weight'),
+                dimensions_length=validated_data.get('length'),
+                dimensions_breadth=validated_data.get('breadth'),
+                dimensions_height=validated_data.get('height'),
+                size=validated_data.get('size'),
                 status=status
             )
 
@@ -560,7 +565,12 @@ def update_product(product_id):
             "gst": 18.00,                        # GST percentage
             "price_code": "ABC123",              # Optional price code
             "tags": "wireless,bluetooth,premium", # Comma-separated tags
-            "box_number": 42                     # Box number (integer)
+            "box_number": 42,                    # Box number (integer)
+            "weight": 500,                       # Weight in grams (integer)
+            "dimensions_length": 100,            # Length in mm (integer)
+            "dimensions_breadth": 50,            # Breadth in mm (integer)
+            "dimensions_height": 30,             # Height in mm (integer)
+            "size": "Medium"                     # Size (string)
         }
 
     Response:

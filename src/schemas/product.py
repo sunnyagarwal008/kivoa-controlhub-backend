@@ -70,6 +70,12 @@ class ProductSchema(Schema):
     price_code = fields.Str(required=False, allow_none=True, validate=validate.Length(max=20))
     tags = fields.Str(required=False, allow_none=True, validate=validate.Length(max=500))
     box_number = fields.Int(required=False, allow_none=True)
+    weight = fields.Int(required=False, allow_none=True)
+    dimensions_length = fields.Int(required=False, allow_none=True)
+    dimensions_breadth = fields.Int(required=False, allow_none=True)
+    dimensions_height = fields.Int(required=False, allow_none=True)
+    dimensions = fields.Dict(dump_only=True)
+    size = fields.Str(required=False, allow_none=True, validate=validate.Length(max=50))
     status = fields.Str(dump_only=True)
     in_stock = fields.Bool(dump_only=True)
     flagged = fields.Bool(dump_only=True)
@@ -102,6 +108,30 @@ class ProductSchema(Schema):
         """Validate purchase_month is in MMYY format"""
         if not re.match(r'^(0[1-9]|1[0-2])\d{2}$', value):
             raise ValidationError('purchase_month must be in MMYY format (e.g., 0124 for January 2024)')
+
+    @validates('weight')
+    def validate_weight(self, value, **kwargs):
+        """Validate weight is positive"""
+        if value is not None and value <= 0:
+            raise ValidationError('Weight must be greater than 0')
+
+    @validates('dimensions_length')
+    def validate_dimensions_length(self, value, **kwargs):
+        """Validate dimensions_length is positive"""
+        if value is not None and value <= 0:
+            raise ValidationError('Dimensions length must be greater than 0')
+
+    @validates('dimensions_breadth')
+    def validate_dimensions_breadth(self, value, **kwargs):
+        """Validate dimensions_breadth is positive"""
+        if value is not None and value <= 0:
+            raise ValidationError('Dimensions breadth must be greater than 0')
+
+    @validates('dimensions_height')
+    def validate_dimensions_height(self, value, **kwargs):
+        """Validate dimensions_height is positive"""
+        if value is not None and value <= 0:
+            raise ValidationError('Dimensions height must be greater than 0')
 
 
 class RawImageSchema(Schema):
