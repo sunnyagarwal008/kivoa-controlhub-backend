@@ -59,6 +59,9 @@ class GeminiService:
 
         _process_api_stream_response(stream, output_file)
 
+        if not os.path.exists(output_file):
+            raise FileNotFoundError(f"Generated image file not found at {output_file}")
+
 
 # Create a singleton instance
 gemini_service = GeminiService()
@@ -277,3 +280,6 @@ def _process_api_stream_response(stream, output_file: str):
                 file_index += 1
             elif part.text:
                 print(part.text)
+
+    if file_index == 0:
+        raise ValueError("No image data received from Gemini API")
