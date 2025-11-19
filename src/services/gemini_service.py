@@ -81,13 +81,20 @@ class GeminiService:
 
         prompt = """Analyze this product image and generate:
 1. A concise, SEO-friendly product title (max 100 characters) suitable for Shopify
-2. A detailed product description (150-300 words) that highlights key features, benefits, and use cases
+2. A product description with the following structure:
+   - A brief summary paragraph (2-3 sentences) that captures the essence of the product
+   - Followed by 4-6 bullet points highlighting key features, benefits, or specifications
 
-Format your response as:
+Format your response EXACTLY as:
 TITLE: [your title here]
-DESCRIPTION: [your description here]
+DESCRIPTION: [summary paragraph here]
 
-Make the title catchy and include key product attributes. Make the description engaging, informative, and persuasive for e-commerce."""
+• [bullet point 1]
+• [bullet point 2]
+• [bullet point 3]
+• [bullet point 4]
+
+Make the title catchy and include key product attributes. Make the description engaging, informative, and persuasive for e-commerce. Use bullet points (•) for the list items."""
 
         contents = [
             types.Part(inline_data=types.Blob(data=image_data, mime_type=mime_type)),
@@ -113,17 +120,26 @@ Make the title catchy and include key product attributes. Make the description e
 
         lines = response_text.split('\n')
         current_section = None
+        description_lines = []
 
         for line in lines:
-            line = line.strip()
-            if line.startswith('TITLE:'):
-                title = line.replace('TITLE:', '').strip()
+            stripped_line = line.strip()
+            if stripped_line.startswith('TITLE:'):
+                title = stripped_line.replace('TITLE:', '').strip()
                 current_section = 'title'
-            elif line.startswith('DESCRIPTION:'):
-                description = line.replace('DESCRIPTION:', '').strip()
+            elif stripped_line.startswith('DESCRIPTION:'):
+                # Get the description content after "DESCRIPTION:"
+                desc_content = stripped_line.replace('DESCRIPTION:', '').strip()
+                if desc_content:
+                    description_lines.append(desc_content)
                 current_section = 'description'
-            elif current_section == 'description' and line:
-                description += ' ' + line
+            elif current_section == 'description' and stripped_line:
+                # Add all subsequent lines to description (including bullet points)
+                description_lines.append(line.rstrip())
+
+        # Join description lines preserving formatting
+        if description_lines:
+            description = '\n'.join(description_lines)
 
         # Fallback parsing if the format is not followed
         if not title or not description:
@@ -145,6 +161,7 @@ Make the title catchy and include key product attributes. Make the description e
 
         print(f"Generated title: {title}")
         print(f"Generated description length: {len(description)} chars")
+        print(f"Description preview:\n{description[:200]}...")
 
         return {
             'title': title,
