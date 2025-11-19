@@ -29,14 +29,18 @@ class WorkerThread(threading.Thread):
         """Stop the worker thread"""
         self.running = False
     
-    def process_product(self, product_id, prompt_id=None):
+    def process_product(self, product_id, prompt_id=None, is_raw_image=True):
         """
-        Process a single product: fetch from DB, generate enhanced images,
-        upload to S3, save to product_images table, update product status
+        Process a single product:
+        1. Generate title and description using Gemini
+        2. If is_raw_image=True: generate AI-enhanced images
+        3. If is_raw_image=False: copy raw image directly to S3
+        4. Update product status
 
         Args:
             product_id: ID of the product to process
             prompt_id: Optional prompt ID for AI image generation
+            is_raw_image: Whether to generate AI images (True) or use raw image directly (False)
         """
         with self.app.app_context():
             try:
@@ -50,78 +54,124 @@ class WorkerThread(threading.Thread):
                 # Get category name from relationship
                 category_name = product.category_ref.name if product.category_ref else 'default'
 
-                current_app.logger.info(f"Processing product {product_id} - {category_name} with prompt_id: {prompt_id}")
+                current_app.logger.info(f"Processing product {product_id} - {category_name} with prompt_id: {prompt_id}, is_raw_image: {is_raw_image}")
 
                 # Download the raw image
                 raw_image = download_image(product.raw_image)
 
-                # Get the configured number of enhanced images to generate
-                ai_images_count = current_app.config['ENHANCED_IMAGES_COUNT']
-
-                # Determine which prompt to use
-                prompt_obj = None
-
-                if prompt_id:
-                    # Use the specific prompt provided
-                    prompt_obj = Prompt.query.filter(
-                        Prompt.id == prompt_id,
-                        Prompt.is_active == True
-                    ).first()
-
-                    if not prompt_obj:
-                        current_app.logger.error(f"Prompt {prompt_id} not found or inactive")
-                        return False
-                else:
-                    # Check if there's a default prompt for this category
-                    prompt_obj = Prompt.query.filter(
-                        Prompt.category_id == product.category_id,
-                        Prompt.is_default == True,
-                        Prompt.is_active == True
-                    ).first()
-
-                    if prompt_obj:
-                        current_app.logger.info(f"Using default prompt {prompt_obj.id} for category {category_name}")
-                        prompt_id = prompt_obj.id  # Store the prompt_id for later use
-
-                # Generate images
-                if prompt_obj:
-                    # Generate all images with the specific prompt
-                    ai_images = []
-                    for i in range(1, ai_images_count + 1):
-                        base_name = os.path.splitext(os.path.basename(raw_image))[0]
-                        extension = os.path.splitext(raw_image)[1]
-                        output_image_name = f"{base_name}-0{i}{extension}"
-                        output_file = os.path.join("/tmp", output_image_name)
-                        gemini_service._do_generate_image(raw_image, output_file, prompt_obj.text)
-                        ai_images.append(output_file)
-                else:
-                    # No specific prompt and no default - use random selection from category prompts
-                    current_app.logger.info(f"No default prompt found for category {category_name}, using random selection")
-                    ai_images = gemini_service.generate_images(raw_image, category_name, ai_images_count, None)
+                # Step 1: Generate title and description using Gemini
+                current_app.logger.info(f"Generating title and description for product {product_id}")
+                try:
+                    title_desc = gemini_service.generate_title_and_description(raw_image)
+                    product.title = title_desc['title']
+                    product.description = title_desc['description']
+                    # Generate handle from title (lowercase, replace spaces with hyphens)
+                    product.handle = title_desc['title'].lower().replace(' ', '-').replace('/', '-')[:255]
+                    current_app.logger.info(f"Generated title: {product.title}")
+                except Exception as e:
+                    current_app.logger.error(f"Failed to generate title/description for product {product_id}: {str(e)}")
+                    # Continue processing even if title/description generation fails
+                    product.title = product.sku
+                    product.description = ""
+                    product.handle = product.sku.lower()
 
                 created_image_urls = []
-
-                # Generate enhanced images
                 bucket_name = current_app.config['S3_BUCKET_NAME']
-                for idx, ai_image in enumerate(ai_images, start=1):
-                    # Get file extension from the AI-generated image
-                    file_extension = os.path.splitext(ai_image)[1]
 
-                    # Create S3 key with format: product-images/<sku>-<index>
-                    key = f"product-images/{product.sku}-{idx}{file_extension}"
+                # Step 2: Handle image processing based on is_raw_image flag
+                if is_raw_image:
+                    # Generate AI-enhanced images
+                    current_app.logger.info(f"Generating AI-enhanced images for product {product_id}")
 
-                    # Generate the S3 URL
-                    image_url = s3_service.upload_file(ai_image, bucket_name=bucket_name, key=key)
+                    # Get the configured number of enhanced images to generate
+                    ai_images_count = current_app.config['ENHANCED_IMAGES_COUNT']
+
+                    # Determine which prompt to use
+                    prompt_obj = None
+
+                    if prompt_id:
+                        # Use the specific prompt provided
+                        prompt_obj = Prompt.query.filter(
+                            Prompt.id == prompt_id,
+                            Prompt.is_active == True
+                        ).first()
+
+                        if not prompt_obj:
+                            current_app.logger.error(f"Prompt {prompt_id} not found or inactive")
+                            return False
+                    else:
+                        # Check if there's a default prompt for this category
+                        prompt_obj = Prompt.query.filter(
+                            Prompt.category_id == product.category_id,
+                            Prompt.is_default == True,
+                            Prompt.is_active == True
+                        ).first()
+
+                        if prompt_obj:
+                            current_app.logger.info(f"Using default prompt {prompt_obj.id} for category {category_name}")
+                            prompt_id = prompt_obj.id  # Store the prompt_id for later use
+
+                    # Generate images
+                    if prompt_obj:
+                        # Generate all images with the specific prompt
+                        ai_images = []
+                        for i in range(1, ai_images_count + 1):
+                            base_name = os.path.splitext(os.path.basename(raw_image))[0]
+                            extension = os.path.splitext(raw_image)[1]
+                            output_image_name = f"{base_name}-0{i}{extension}"
+                            output_file = os.path.join("/tmp", output_image_name)
+                            gemini_service._do_generate_image(raw_image, output_file, prompt_obj.text)
+                            ai_images.append(output_file)
+                    else:
+                        # No specific prompt and no default - use random selection from category prompts
+                        current_app.logger.info(f"No default prompt found for category {category_name}, using random selection")
+                        ai_images = gemini_service.generate_images(raw_image, category_name, ai_images_count, None)
+
+                    # Upload AI-generated images to S3
+                    for idx, ai_image in enumerate(ai_images, start=1):
+                        # Get file extension from the AI-generated image
+                        file_extension = os.path.splitext(ai_image)[1]
+
+                        # Create S3 key with format: product-images/<sku>-<index>
+                        key = f"product-images/{product.sku}-{idx}{file_extension}"
+
+                        # Upload to S3
+                        image_url = s3_service.upload_file(ai_image, bucket_name=bucket_name, key=key)
+                        created_image_urls.append(image_url)
+                        current_app.logger.info(f"Created enhanced image for product {product_id}: {image_url}")
+
+                    # Save images to product_images table with 'pending' status
+                    for image_url in created_image_urls:
+                        product_image = ProductImage(
+                            product_id=product_id,
+                            image_url=image_url,
+                            status='pending',
+                            prompt_id=prompt_id
+                        )
+                        db.session.add(product_image)
+
+                else:
+                    # Copy raw image directly to S3 (no AI processing)
+                    current_app.logger.info(f"Copying raw image directly for product {product_id}")
+
+                    # Get file extension from the raw image
+                    file_extension = os.path.splitext(raw_image)[1]
+                    if not file_extension:
+                        file_extension = '.jpg'  # default extension
+
+                    # Create S3 key with format: product-images/<sku>-1<extension>
+                    key = f"product-images/{product.sku}-1{file_extension}"
+
+                    # Upload the raw image to S3
+                    image_url = s3_service.upload_file(raw_image, bucket_name=bucket_name, key=key)
                     created_image_urls.append(image_url)
-                    current_app.logger.info(f"Created enhanced images for product {product_id}: {image_url}")
+                    current_app.logger.info(f"Copied raw image for product {product_id}: {image_url}")
 
-                for image_url in created_image_urls:
-                    # Save to product_images table with prompt_id
+                    # Save image to product_images table with 'approved' status
                     product_image = ProductImage(
                         product_id=product_id,
                         image_url=image_url,
-                        status='pending',
-                        prompt_id=prompt_id
+                        status='approved'
                     )
                     db.session.add(product_image)
 
@@ -134,12 +184,12 @@ class WorkerThread(threading.Thread):
                 # Commit all changes
                 db.session.commit()
 
-                current_app.logger.info(f"Successfully processed product {product_id}. Created {len(created_image_urls)} enhanced images.")
+                current_app.logger.info(f"Successfully processed product {product_id}. Created {len(created_image_urls)} image(s), title: {product.title}")
                 return True
 
             except Exception as e:
                 db.session.rollback()
-                current_app.logger.error(f"Error processing product {product_id}: {str(e)}")
+                current_app.logger.error(f"Error processing product {product_id}: {str(e)}", exc_info=True)
                 return False
     
     def run(self):
@@ -168,16 +218,17 @@ class WorkerThread(threading.Thread):
                             body = json.loads(message['Body'])
                             product_id = body.get('product_id')
                             prompt_id = body.get('prompt_id')
+                            is_raw_image = body.get('is_raw_image', True)  # Default to True for backward compatibility
 
                             if not product_id:
                                 current_app.logger.error(f"Invalid message format: {message['Body']}")
                                 sqs_service.delete_message(message['ReceiptHandle'])
                                 continue
 
-                            current_app.logger.info(f"Received message for product_id: {product_id}, prompt_id: {prompt_id}")
+                            current_app.logger.info(f"Received message for product_id: {product_id}, prompt_id: {prompt_id}, is_raw_image: {is_raw_image}")
 
                             # Process the product
-                            success = self.process_product(product_id, prompt_id)
+                            success = self.process_product(product_id, prompt_id, is_raw_image)
 
                             if success:
                                 # Delete message from queue after successful processing

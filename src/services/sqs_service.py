@@ -21,13 +21,14 @@ class SQSService:
             )
         return self.sqs_client
     
-    def send_message(self, product_id, prompt_id=None):
+    def send_message(self, product_id, prompt_id=None, is_raw_image=False):
         """
         Send a product ID to SQS queue for processing
 
         Args:
             product_id: ID of the product to process
             prompt_id: Optional prompt ID for AI image generation
+            is_raw_image: Whether the product has a raw image that needs AI processing (default: False)
 
         Returns:
             dict: Response from SQS
@@ -37,7 +38,8 @@ class SQSService:
 
         try:
             message_body = {
-                'product_id': product_id
+                'product_id': product_id,
+                'is_raw_image': is_raw_image
             }
 
             # Include prompt_id if provided
@@ -49,7 +51,7 @@ class SQSService:
                 MessageBody=json.dumps(message_body)
             )
 
-            current_app.logger.info(f"Sent product_id {product_id} to SQS queue with prompt_id: {prompt_id}")
+            current_app.logger.info(f"Sent product_id {product_id} to SQS queue with prompt_id: {prompt_id}, is_raw_image: {is_raw_image}")
             return response
 
         except ClientError as e:

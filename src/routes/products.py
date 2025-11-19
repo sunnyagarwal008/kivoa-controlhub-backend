@@ -185,7 +185,6 @@ def bulk_create_products():
 
         created_products = []
         product_ids_for_queue = []
-        products_for_direct_upload = []
 
         for index, product_data in enumerate(products_data):
             # Validate product data
@@ -209,10 +208,9 @@ def bulk_create_products():
             # Get optional prompt_id for AI image generation
             prompt_id = validated_data.get('prompt_id')
 
-            # Set status based on is_raw_image flag
-            # If is_raw_image is True, status is 'pending' (needs AI processing)
-            # If is_raw_image is False, status is 'pending_review' (ready-to-use image)
-            status = 'pending' if is_raw_image else 'pending_review'
+            # All products now start with 'pending' status as they all go through SQS processing
+            # The worker will generate title/description and optionally AI images
+            status = 'pending'
 
             # Create new product
             product = Product(
@@ -246,73 +244,32 @@ def bulk_create_products():
             product_data.pop('handle', None)
             created_products.append(product_data)
 
-            # Track products based on processing type
-            if is_raw_image:
-                product_ids_for_queue.append({
-                    'id': product.id,
-                    'prompt_id': prompt_id
-                })
-            else:
-                products_for_direct_upload.append({
-                    'id': product.id,
-                    'sku': product.sku,
-                    'raw_image': product.raw_image
-                })
+            # All products now go to the queue for processing
+            product_ids_for_queue.append({
+                'id': product.id,
+                'prompt_id': prompt_id,
+                'is_raw_image': is_raw_image
+            })
 
         # Commit all products
         db.session.commit()
 
-        # Process products with is_raw_image=False: copy image to S3
-        for product_info in products_for_direct_upload:
-            try:
-                # Get file extension from the raw_image URL
-                file_extension = os.path.splitext(product_info['raw_image'].split('?')[0])[1]
-                if not file_extension:
-                    file_extension = '.jpg'  # default extension
-
-                # Create S3 key with format: product-images/<sku>-1<extension>
-                key = f"product-images/{product_info['sku']}-1{file_extension}"
-
-                # Copy image from URL to S3
-                image_url = s3_service.copy_image_from_url_to_s3(product_info['raw_image'], key)
-
-                # Create ProductImage entry
-                product_image = ProductImage(
-                    product_id=product_info['id'],
-                    image_url=image_url,
-                    status='approved'
-                )
-                db.session.add(product_image)
-
-                current_app.logger.info(f"Copied image for product {product_info['id']} to S3: {image_url}")
-
-                # Delete from raw_images table if the raw_image URL exists there
-                delete_raw_image_by_url(product_info['raw_image'])
-
-            except Exception as e:
-                # Log the error but don't fail the entire request
-                current_app.logger.error(f"Failed to copy image for product {product_info['id']}: {str(e)}")
-                raise e
-
-        # Commit product images and raw_image deletions
-        db.session.commit()
-
-        # Send products with is_raw_image=True to SQS queue for AI processing
+        # Send all products to SQS queue for processing
+        # Worker will generate title/description and optionally AI images
         for product_info in product_ids_for_queue:
             try:
-                sqs_service.send_message(product_info['id'], product_info['prompt_id'])
+                sqs_service.send_message(
+                    product_info['id'],
+                    product_info['prompt_id'],
+                    product_info['is_raw_image']
+                )
             except Exception as e:
                 # Log the error but don't fail the entire request
                 # The products are already created
                 current_app.logger.error(f"Failed to send product_id {product_info['id']} to SQS: {str(e)}")
 
         # Prepare response message
-        if product_ids_for_queue and products_for_direct_upload:
-            message = f'Successfully created {len(created_products)} products: {len(product_ids_for_queue)} queued for AI processing, {len(products_for_direct_upload)} marked as live'
-        elif product_ids_for_queue:
-            message = f'Successfully created {len(created_products)} products and queued for AI processing'
-        else:
-            message = f'Successfully created {len(created_products)} products and marked as live'
+        message = f'Successfully created {len(created_products)} products and queued for processing'
 
         return jsonify({
             'success': True,
@@ -321,7 +278,6 @@ def bulk_create_products():
                 'created': len(created_products),
                 'total': len(products_data),
                 'queued_for_processing': len(product_ids_for_queue),
-                'marked_as_live': len(products_for_direct_upload),
                 'products': created_products
             }
         }), 201
@@ -1417,7 +1373,8 @@ def retry_image_generation(product_id):
 
     Request Body (optional):
         {
-            "prompt_id": 123  # Optional prompt ID for AI image generation
+            "prompt_id": 123,  # Optional prompt ID for AI image generation
+            "is_raw_image": true  # Optional flag to indicate if AI image generation is needed (default: true)
         }
 
     Response:
@@ -1426,7 +1383,8 @@ def retry_image_generation(product_id):
             "message": "Product queued for image generation",
             "data": {
                 "product_id": 1,
-                "prompt_id": 123
+                "prompt_id": 123,
+                "is_raw_image": true
             }
         }
     """
@@ -1444,11 +1402,12 @@ def retry_image_generation(product_id):
         # Get request body (optional)
         data = request.get_json() or {}
         prompt_id = data.get('prompt_id')
+        is_raw_image = data.get('is_raw_image', True)  # Default to True for AI image generation
 
         # Send message to SQS queue
         try:
-            sqs_service.send_message(product_id, prompt_id)
-            current_app.logger.info(f"Queued product {product_id} for image generation with prompt_id: {prompt_id}")
+            sqs_service.send_message(product_id, prompt_id, is_raw_image)
+            current_app.logger.info(f"Queued product {product_id} for image generation with prompt_id: {prompt_id}, is_raw_image: {is_raw_image}")
         except Exception as e:
             current_app.logger.error(f"Failed to send product_id {product_id} to SQS: {str(e)}")
             return jsonify({
@@ -1461,7 +1420,8 @@ def retry_image_generation(product_id):
             'message': 'Product queued for image generation',
             'data': {
                 'product_id': product_id,
-                'prompt_id': prompt_id
+                'prompt_id': prompt_id,
+                'is_raw_image': is_raw_image
             }
         }), 200
 

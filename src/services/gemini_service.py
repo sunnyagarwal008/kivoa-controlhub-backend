@@ -62,6 +62,95 @@ class GeminiService:
         if not os.path.exists(output_file):
             raise FileNotFoundError(f"Generated image file not found at {output_file}")
 
+    def generate_title_and_description(self, image_path):
+        """
+        Generate product title and description from an image using Gemini
+
+        Args:
+            image_path: Path to the product image file
+
+        Returns:
+            dict: Dictionary with 'title' and 'description' keys
+        """
+        print(f"Generating title and description for {image_path}...")
+
+        with open(image_path, "rb") as f:
+            image_data = f.read()
+
+        mime_type = _get_mime_type(image_path)
+
+        prompt = """Analyze this product image and generate:
+1. A concise, SEO-friendly product title (max 100 characters) suitable for Shopify
+2. A detailed product description (150-300 words) that highlights key features, benefits, and use cases
+
+Format your response as:
+TITLE: [your title here]
+DESCRIPTION: [your description here]
+
+Make the title catchy and include key product attributes. Make the description engaging, informative, and persuasive for e-commerce."""
+
+        contents = [
+            types.Part(inline_data=types.Blob(data=image_data, mime_type=mime_type)),
+            genai.types.Part.from_text(text=prompt)
+        ]
+
+        generate_content_config = types.GenerateContentConfig(response_modalities=["TEXT"])
+
+        client = self._get_client()
+        response = client.models.generate_content(
+            model=current_app.config['GEMINI_MODEL'],
+            contents=contents,
+            config=generate_content_config,
+        )
+
+        # Parse the response
+        response_text = response.text.strip()
+        print(f"Gemini response: {response_text}")
+
+        # Extract title and description
+        title = ""
+        description = ""
+
+        lines = response_text.split('\n')
+        current_section = None
+
+        for line in lines:
+            line = line.strip()
+            if line.startswith('TITLE:'):
+                title = line.replace('TITLE:', '').strip()
+                current_section = 'title'
+            elif line.startswith('DESCRIPTION:'):
+                description = line.replace('DESCRIPTION:', '').strip()
+                current_section = 'description'
+            elif current_section == 'description' and line:
+                description += ' ' + line
+
+        # Fallback parsing if the format is not followed
+        if not title or not description:
+            # Try to split by newlines and take first line as title, rest as description
+            parts = response_text.split('\n', 1)
+            if len(parts) >= 1:
+                title = parts[0].replace('TITLE:', '').strip()
+            if len(parts) >= 2:
+                description = parts[1].replace('DESCRIPTION:', '').strip()
+
+        # Ensure we have at least something
+        if not title:
+            title = "Product"
+        if not description:
+            description = response_text[:500] if response_text else "Product description"
+
+        # Trim title to max 255 characters (database limit)
+        title = title[:255]
+
+        print(f"Generated title: {title}")
+        print(f"Generated description length: {len(description)} chars")
+
+        return {
+            'title': title,
+            'description': description.strip()
+        }
+
 
 # Create a singleton instance
 gemini_service = GeminiService()
