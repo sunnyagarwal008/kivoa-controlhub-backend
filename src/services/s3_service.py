@@ -5,14 +5,15 @@ import uuid
 import os
 import requests
 import tempfile
+import mimetypes
 
 
 class S3Service:
     """Service class for AWS S3 operations"""
-    
+
     def __init__(self):
         self.s3_client = None
-    
+
     def _get_s3_client(self):
         """Get or create S3 client"""
         if self.s3_client is None:
@@ -24,9 +25,54 @@ class S3Service:
             )
         return self.s3_client
 
+    def _get_content_type(self, file_path):
+        """
+        Determine content type from file extension
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            str: MIME type of the file
+        """
+        # Get file extension
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+
+        # Map common image extensions to MIME types
+        content_type_map = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.bmp': 'image/bmp',
+            '.svg': 'image/svg+xml',
+            '.pdf': 'application/pdf',
+            '.csv': 'text/csv',
+        }
+
+        # Try to get from our map first
+        if ext in content_type_map:
+            return content_type_map[ext]
+
+        # Fall back to mimetypes module
+        content_type, _ = mimetypes.guess_type(file_path)
+        return content_type or 'application/octet-stream'
+
     def upload_file(self, file_path, bucket_name, key):
         s3_client = self._get_s3_client()
-        s3_client.upload_file(file_path, bucket_name, key)
+
+        # Determine content type from file extension
+        content_type = self._get_content_type(file_path)
+
+        # Upload file with correct content type
+        s3_client.upload_file(
+            file_path,
+            bucket_name,
+            key,
+            ExtraArgs={'ContentType': content_type}
+        )
 
         # Construct file URL (assuming public bucket or CDN)
         region = current_app.config.get('AWS_REGION', 'ap-south-1')
