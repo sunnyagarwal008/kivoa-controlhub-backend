@@ -836,7 +836,7 @@ def export_shopify_csv():
                 'Body (HTML)': description,
                 'Vendor': 'KIVOA',
                 'Type': category_name,
-                'Product Category': 'Apparel & Accessories > Jewelery',
+                'Product Category': 'Apparel & Accessories > Jewelry',
                 'Tags': product.tags if product.tags else '',
                 'Published': published,
                 'Option1 Name': 'Default',
