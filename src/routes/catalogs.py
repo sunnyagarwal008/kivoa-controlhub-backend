@@ -827,7 +827,7 @@ def export_shopify_csv():
             published = 'TRUE' if product.status == 'live' else 'FALSE'
 
             # Determine inventory quantity
-            inventory_qty = product.quantity if product.quantity is not None else 0
+            inventory_qty = product.inventory if product.inventory is not None else 0
 
             # First row with product details
             row = {
