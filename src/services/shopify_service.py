@@ -470,6 +470,238 @@ class ShopifyService:
 
         return page_info
 
+    def find_product_by_sku(self, sku):
+        """
+        Find a product in Shopify by SKU
+
+        Args:
+            sku (str): Product SKU to search for
+
+        Returns:
+            dict: Shopify product object if found, None otherwise
+        """
+        self._get_config()
+
+        # Search for product by SKU using GraphQL would be better, but REST API works too
+        # We'll search through variants since SKU is stored at variant level
+        url = self._get_api_url(f'products.json?limit=250')
+        headers = self._get_headers()
+
+        current_app.logger.info(f"Searching for product with SKU: {sku}")
+
+        # Note: This is a simplified search. For production, consider using GraphQL API
+        # or maintaining a local mapping of SKU to Shopify product ID
+        response = requests.get(url, headers=headers)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(f"Shopify API error searching products: {response.status_code} - {response.text}")
+            return None
+
+        products = response.json().get('products', [])
+
+        # Search through products and their variants for matching SKU
+        for product in products:
+            for variant in product.get('variants', []):
+                if variant.get('sku') == sku:
+                    current_app.logger.info(f"Found product with SKU {sku}: product_id={product['id']}, variant_id={variant['id']}")
+                    return product
+
+        current_app.logger.info(f"No product found with SKU: {sku}")
+        return None
+
+    def create_product(self, title, description, sku, price, inventory_quantity, weight=None,
+                      images=None, tags=None, vendor=None):
+        """
+        Create a new product in Shopify
+
+        Args:
+            title (str): Product title
+            description (str): Product description (HTML allowed)
+            sku (str): Product SKU
+            price (float): Product price
+            inventory_quantity (int): Initial inventory quantity
+            weight (int): Weight in grams (optional)
+            images (list): List of image URLs (optional)
+            tags (str): Comma-separated tags (optional)
+            vendor (str): Vendor name (optional)
+
+        Returns:
+            dict: Created Shopify product object
+        """
+        self._get_config()
+
+        # Build product payload
+        payload = {
+            "product": {
+                "title": title,
+                "body_html": description,
+                "vendor": vendor or "Kivoa",
+                "product_type": "",
+                "tags": tags or "",
+                "variants": [
+                    {
+                        "sku": sku,
+                        "price": str(price),
+                        "inventory_management": "shopify",
+                        "inventory_quantity": inventory_quantity,
+                        "weight": weight,
+                        "weight_unit": "g" if weight else None
+                    }
+                ]
+            }
+        }
+
+        # Add images if provided
+        if images:
+            payload["product"]["images"] = [{"src": img_url} for img_url in images]
+
+        url = self._get_api_url('products.json')
+        headers = self._get_headers()
+
+        current_app.logger.info(f"Creating Shopify product: {title} (SKU: {sku})")
+
+        response = requests.post(url, json=payload, headers=headers)
+
+        if response.status_code not in [200, 201]:
+            error_msg = f"Shopify API error creating product: {response.status_code} - {response.text}"
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
+
+        product = response.json().get('product', {})
+        current_app.logger.info(f"Successfully created Shopify product: {product.get('id')} (SKU: {sku})")
+
+        return product
+
+    def update_product(self, product_id, title=None, description=None, price=None,
+                      inventory_quantity=None, weight=None, images=None, tags=None):
+        """
+        Update an existing product in Shopify
+
+        Args:
+            product_id (int): Shopify product ID
+            title (str): Product title (optional)
+            description (str): Product description (optional)
+            price (float): Product price (optional)
+            inventory_quantity (int): Inventory quantity (optional)
+            weight (int): Weight in grams (optional)
+            images (list): List of image URLs (optional)
+            tags (str): Comma-separated tags (optional)
+
+        Returns:
+            dict: Updated Shopify product object
+        """
+        self._get_config()
+
+        # Build update payload - only include fields that are provided
+        payload = {"product": {}}
+
+        if title is not None:
+            payload["product"]["title"] = title
+
+        if description is not None:
+            payload["product"]["body_html"] = description
+
+        if tags is not None:
+            payload["product"]["tags"] = tags
+
+        # Handle variant updates (price, inventory, weight)
+        # First, get the product to find the variant ID
+        get_url = self._get_api_url(f'products/{product_id}.json')
+        headers = self._get_headers()
+
+        response = requests.get(get_url, headers=headers)
+
+        if response.status_code not in [200, 201]:
+            error_msg = f"Shopify API error retrieving product: {response.status_code} - {response.text}"
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
+
+        product = response.json().get('product', {})
+        variants = product.get('variants', [])
+
+        if not variants:
+            raise Exception(f"Product {product_id} has no variants")
+
+        # Update the first variant (assuming single variant products)
+        variant_id = variants[0]['id']
+
+        # Update variant if price, inventory, or weight is provided
+        if price is not None or inventory_quantity is not None or weight is not None:
+            variant_payload = {"variant": {}}
+
+            if price is not None:
+                variant_payload["variant"]["price"] = str(price)
+
+            if weight is not None:
+                variant_payload["variant"]["weight"] = weight
+                variant_payload["variant"]["weight_unit"] = "g"
+
+            variant_url = self._get_api_url(f'variants/{variant_id}.json')
+            variant_response = requests.put(variant_url, json=variant_payload, headers=headers)
+
+            if variant_response.status_code not in [200, 201]:
+                error_msg = f"Shopify API error updating variant: {variant_response.status_code} - {variant_response.text}"
+                current_app.logger.error(error_msg)
+                raise Exception(error_msg)
+
+            # Update inventory if provided
+            if inventory_quantity is not None:
+                # Get inventory item ID from variant
+                inventory_item_id = variants[0].get('inventory_item_id')
+                if inventory_item_id:
+                    # Get available locations
+                    locations_url = self._get_api_url('locations.json')
+                    locations_response = requests.get(locations_url, headers=headers)
+
+                    if locations_response.status_code in [200, 201]:
+                        locations = locations_response.json().get('locations', [])
+                        if locations:
+                            location_id = locations[0]['id']
+
+                            # Set inventory level
+                            inventory_url = self._get_api_url('inventory_levels/set.json')
+                            inventory_payload = {
+                                "location_id": location_id,
+                                "inventory_item_id": inventory_item_id,
+                                "available": inventory_quantity
+                            }
+
+                            inventory_response = requests.post(inventory_url, json=inventory_payload, headers=headers)
+
+                            if inventory_response.status_code not in [200, 201]:
+                                current_app.logger.warning(f"Failed to update inventory: {inventory_response.text}")
+
+        # Update product-level fields if any were provided
+        if payload["product"]:
+            update_url = self._get_api_url(f'products/{product_id}.json')
+            response = requests.put(update_url, json=payload, headers=headers)
+
+            if response.status_code not in [200, 201]:
+                error_msg = f"Shopify API error updating product: {response.status_code} - {response.text}"
+                current_app.logger.error(error_msg)
+                raise Exception(error_msg)
+
+            product = response.json().get('product', {})
+
+        # Handle images if provided
+        if images is not None:
+            # Delete existing images
+            for img in product.get('images', []):
+                delete_img_url = self._get_api_url(f'products/{product_id}/images/{img["id"]}.json')
+                requests.delete(delete_img_url, headers=headers)
+
+            # Add new images
+            for img_url in images:
+                img_payload = {"image": {"src": img_url}}
+                img_create_url = self._get_api_url(f'products/{product_id}/images.json')
+                requests.post(img_create_url, json=img_payload, headers=headers)
+
+        current_app.logger.info(f"Successfully updated Shopify product: {product_id}")
+
+        # Fetch updated product
+        response = requests.get(get_url, headers=headers)
+        return response.json().get('product', {})
+
 
 # Create a singleton instance
 shopify_service = ShopifyService()

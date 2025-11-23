@@ -27,6 +27,7 @@ class Config:
 
     # AWS SQS Configuration
     SQS_QUEUE_URL = os.getenv('SQS_QUEUE_URL')
+    CATALOG_SYNC_QUEUE_URL = os.getenv('CATALOG_SYNC_QUEUE_URL')
 
     # Gemini API Configuration
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')

@@ -3,7 +3,7 @@ from flask_cors import CORS
 from src.config import config
 from src.database import init_db
 from src.routes import api
-from src.workers import start_worker
+from src.workers import start_worker, start_catalog_sync_worker
 import os
 
 
@@ -25,9 +25,10 @@ def create_app(config_name=None):
     # Register blueprints
     app.register_blueprint(api)
 
-    # Start worker thread for SQS processing
+    # Start worker threads for SQS processing
     with app.app_context():
         start_worker(app)
+        start_catalog_sync_worker(app)
     
     # Root endpoint
     @app.route('/')

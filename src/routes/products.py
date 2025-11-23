@@ -597,6 +597,14 @@ def update_product(product_id):
 
         db.session.commit()
 
+        # Send catalog sync message if product is live
+        if product.status == 'live':
+            try:
+                sqs_service.send_catalog_sync_message(product.id, action='update')
+                current_app.logger.info(f"Sent catalog sync message for updated product {product.id}")
+            except Exception as e:
+                current_app.logger.error(f"Failed to send catalog sync message for product {product.id}: {str(e)}")
+
         return jsonify({
             'success': True,
             'message': 'Product updated successfully',
@@ -955,6 +963,15 @@ def update_product_status():
 
         db.session.commit()
 
+        # Send catalog sync messages for products that are now 'live'
+        if new_status == 'live':
+            for product in updated_products:
+                try:
+                    sqs_service.send_catalog_sync_message(product.id, action='create')
+                    current_app.logger.info(f"Sent catalog sync message for product {product.id}")
+                except Exception as e:
+                    current_app.logger.error(f"Failed to send catalog sync message for product {product.id}: {str(e)}")
+
         # Prepare response data - exclude title, description, handle from bulk status update
         products_data = []
         for product in updated_products:
@@ -1182,6 +1199,14 @@ def upload_product_image(product_id):
         db.session.commit()
 
         current_app.logger.info(f"Successfully uploaded and saved image for product {product_id}: {uploaded_image_url}")
+
+        # Send catalog sync message if product is live
+        if product.status == 'live':
+            try:
+                sqs_service.send_catalog_sync_message(product.id, action='update')
+                current_app.logger.info(f"Sent catalog sync message for product {product.id} after image upload")
+            except Exception as e:
+                current_app.logger.error(f"Failed to send catalog sync message for product {product.id}: {str(e)}")
 
         return jsonify({
             'success': True,
