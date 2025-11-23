@@ -594,6 +594,26 @@ class ShopifyService:
         """
         self._get_config()
 
+        # Log what's being updated
+        update_fields = []
+        if title is not None:
+            update_fields.append(f"title='{title[:50]}...' " if len(title) > 50 else f"title='{title}'")
+        if description is not None:
+            desc_preview = description[:100] + "..." if len(description) > 100 else description
+            update_fields.append(f"description='{desc_preview}'")
+        if price is not None:
+            update_fields.append(f"price={price}")
+        if inventory_quantity is not None:
+            update_fields.append(f"inventory={inventory_quantity}")
+        if weight is not None:
+            update_fields.append(f"weight={weight}g")
+        if images is not None:
+            update_fields.append(f"images={len(images)} images")
+        if tags is not None:
+            update_fields.append(f"tags='{tags}'")
+
+        current_app.logger.info(f"Updating Shopify product {product_id}: {', '.join(update_fields) if update_fields else 'no changes'}")
+
         # Build update payload - only include fields that are provided
         payload = {"product": {}}
 
@@ -630,13 +650,18 @@ class ShopifyService:
         # Update variant if price, inventory, or weight is provided
         if price is not None or inventory_quantity is not None or weight is not None:
             variant_payload = {"variant": {}}
+            variant_updates = []
 
             if price is not None:
                 variant_payload["variant"]["price"] = str(price)
+                variant_updates.append(f"price={price}")
 
             if weight is not None:
                 variant_payload["variant"]["weight"] = weight
                 variant_payload["variant"]["weight_unit"] = "g"
+                variant_updates.append(f"weight={weight}g")
+
+            current_app.logger.info(f"Updating variant {variant_id}: {', '.join(variant_updates)}")
 
             variant_url = self._get_api_url(f'variants/{variant_id}.json')
             variant_response = requests.put(variant_url, json=variant_payload, headers=headers)
@@ -646,11 +671,15 @@ class ShopifyService:
                 current_app.logger.error(error_msg)
                 raise Exception(error_msg)
 
+            current_app.logger.info(f"Successfully updated variant {variant_id}")
+
             # Update inventory if provided
             if inventory_quantity is not None:
                 # Get inventory item ID from variant
                 inventory_item_id = variants[0].get('inventory_item_id')
                 if inventory_item_id:
+                    current_app.logger.info(f"Updating inventory for item {inventory_item_id} to {inventory_quantity}")
+
                     # Get available locations
                     locations_url = self._get_api_url('locations.json')
                     locations_response = requests.get(locations_url, headers=headers)
@@ -659,6 +688,8 @@ class ShopifyService:
                         locations = locations_response.json().get('locations', [])
                         if locations:
                             location_id = locations[0]['id']
+                            location_name = locations[0].get('name', 'Unknown')
+                            current_app.logger.info(f"Setting inventory at location '{location_name}' (ID: {location_id})")
 
                             # Set inventory level
                             inventory_url = self._get_api_url('inventory_levels/set.json')
@@ -672,9 +703,20 @@ class ShopifyService:
 
                             if inventory_response.status_code not in [200, 201]:
                                 current_app.logger.warning(f"Failed to update inventory: {inventory_response.text}")
+                            else:
+                                current_app.logger.info(f"Successfully updated inventory to {inventory_quantity}")
+                        else:
+                            current_app.logger.warning("No locations found for inventory update")
+                    else:
+                        current_app.logger.warning(f"Failed to get locations: {locations_response.text}")
+                else:
+                    current_app.logger.warning("No inventory_item_id found for variant")
 
         # Update product-level fields if any were provided
         if payload["product"]:
+            product_updates = list(payload["product"].keys())
+            current_app.logger.info(f"Updating product-level fields: {', '.join(product_updates)}")
+
             update_url = self._get_api_url(f'products/{product_id}.json')
             response = requests.put(update_url, json=payload, headers=headers)
 
@@ -684,23 +726,37 @@ class ShopifyService:
                 raise Exception(error_msg)
 
             product = response.json().get('product', {})
+            current_app.logger.info(f"Successfully updated product-level fields")
 
         # Handle images if provided
         if images is not None:
+            existing_image_count = len(product.get('images', []))
+            current_app.logger.info(f"Replacing {existing_image_count} existing images with {len(images)} new images")
+
             # Delete existing images
+            deleted_count = 0
             for img in product.get('images', []):
                 delete_img_url = self._get_api_url(f'products/{product_id}/images/{img["id"]}.json')
-                requests.delete(delete_img_url, headers=headers)
+                delete_response = requests.delete(delete_img_url, headers=headers)
+                if delete_response.status_code in [200, 204]:
+                    deleted_count += 1
+
+            current_app.logger.info(f"Deleted {deleted_count} existing images")
 
             # Add new images (convert CDN URLs to S3 URLs for Shopify compatibility)
+            added_count = 0
             for img_url in images:
                 # Convert CDN URL to S3 URL so Shopify can download it
                 s3_url = self._convert_cdn_to_s3_url(img_url)
                 img_payload = {"image": {"src": s3_url}}
                 img_create_url = self._get_api_url(f'products/{product_id}/images.json')
-                requests.post(img_create_url, json=img_payload, headers=headers)
+                img_response = requests.post(img_create_url, json=img_payload, headers=headers)
+                if img_response.status_code in [200, 201]:
+                    added_count += 1
 
-        current_app.logger.info(f"Successfully updated Shopify product: {product_id}")
+            current_app.logger.info(f"Added {added_count}/{len(images)} new images")
+
+        current_app.logger.info(f"✓ Successfully updated Shopify product: {product_id}")
 
         # Fetch updated product
         response = requests.get(get_url, headers=headers)
