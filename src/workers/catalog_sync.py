@@ -38,10 +38,12 @@ class CatalogSyncWorker(threading.Thread):
             bool: True if successful, False otherwise
         """
         try:
-            # Expire all cached objects to ensure we get fresh data from database
-            db.session.expire_all()
+            # Close and remove the current session to force a fresh connection
+            # This ensures we get the latest data from the database, not cached data
+            db.session.close()
+            db.session.remove()
 
-            # Fetch product from database (fresh query, not from cache)
+            # Fetch product from database (fresh query with new session)
             product = db.session.query(Product).filter_by(id=product_id).first()
 
             if not product:
@@ -54,7 +56,7 @@ class CatalogSyncWorker(threading.Thread):
                 return True
 
             current_app.logger.info(f"Syncing product {product_id} to Shopify (action: {action})")
-            current_app.logger.info(f"Product data: SKU={product.sku}, Title='{product.title}', Price={product.price}, Inventory={product.inventory}")
+            current_app.logger.info(f"Product data from DB: SKU={product.sku}, Title='{product.title}', Price={product.price}, Inventory={product.inventory}")
 
             # Get product images (approved images only, ordered by priority)
             product_images = ProductImage.query.filter_by(
