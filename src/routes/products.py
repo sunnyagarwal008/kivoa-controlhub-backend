@@ -1200,10 +1200,10 @@ def upload_product_image(product_id):
 
         current_app.logger.info(f"Successfully uploaded and saved image for product {product_id}: {uploaded_image_url}")
 
-        # Send catalog sync message if product is live
+        # Send catalog sync message if product is live (images only)
         if product.status == 'live':
             try:
-                sqs_service.send_catalog_sync_message(product.id, action='update')
+                sqs_service.send_catalog_sync_message(product.id, action='update_images')
                 current_app.logger.info(f"Sent catalog sync message for product {product.id} after image upload")
             except Exception as e:
                 current_app.logger.error(f"Failed to send catalog sync message for product {product.id}: {str(e)}")

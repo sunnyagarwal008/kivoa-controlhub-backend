@@ -702,6 +702,54 @@ class ShopifyService:
         response = requests.get(get_url, headers=headers)
         return response.json().get('product', {})
 
+    def update_product_images(self, product_id, images):
+        """
+        Update only the images for a product in Shopify
+
+        Args:
+            product_id (int): Shopify product ID
+            images (list): List of image URLs to set
+
+        Returns:
+            dict: Updated Shopify product object
+        """
+        self._get_config()
+
+        get_url = self._get_api_url(f'products/{product_id}.json')
+        headers = self._get_headers()
+
+        # Get current product to access existing images
+        response = requests.get(get_url, headers=headers)
+
+        if response.status_code not in [200, 201]:
+            error_msg = f"Shopify API error retrieving product: {response.status_code} - {response.text}"
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
+
+        product = response.json().get('product', {})
+
+        # Delete existing images
+        for img in product.get('images', []):
+            delete_img_url = self._get_api_url(f'products/{product_id}/images/{img["id"]}.json')
+            delete_response = requests.delete(delete_img_url, headers=headers)
+            if delete_response.status_code not in [200, 204]:
+                current_app.logger.warning(f"Failed to delete image {img['id']}: {delete_response.text}")
+
+        # Add new images
+        if images:
+            for img_url in images:
+                img_payload = {"image": {"src": img_url}}
+                img_create_url = self._get_api_url(f'products/{product_id}/images.json')
+                img_response = requests.post(img_create_url, json=img_payload, headers=headers)
+                if img_response.status_code not in [200, 201]:
+                    current_app.logger.warning(f"Failed to add image {img_url}: {img_response.text}")
+
+        current_app.logger.info(f"Successfully updated images for Shopify product: {product_id}")
+
+        # Fetch updated product
+        response = requests.get(get_url, headers=headers)
+        return response.json().get('product', {})
+
 
 # Create a singleton instance
 shopify_service = ShopifyService()

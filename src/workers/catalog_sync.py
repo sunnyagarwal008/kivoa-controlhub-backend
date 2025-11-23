@@ -74,20 +74,35 @@ class CatalogSyncWorker(threading.Thread):
             if existing_product:
                 # Update existing product
                 shopify_product_id = existing_product['id']
-                current_app.logger.info(f"Updating existing Shopify product {shopify_product_id} for SKU {sku}")
+                current_app.logger.info(f"Updating existing Shopify product {shopify_product_id} for SKU {sku} (action: {action})")
 
-                shopify_service.update_product(
-                    product_id=shopify_product_id,
-                    title=title,
-                    description=description,
-                    price=price,
-                    inventory_quantity=inventory_quantity,
-                    weight=weight,
-                    images=image_urls if image_urls else None,
-                    tags=tags
-                )
+                if action == 'update_images':
+                    # Only update images
+                    shopify_service.update_product_images(
+                        product_id=shopify_product_id,
+                        images=image_urls
+                    )
+                    current_app.logger.info(f"Successfully updated images for Shopify product {shopify_product_id}")
+                else:
+                    # Update product details but don't touch images
+                    # Only set images on initial create action
+                    update_images = None
+                    if action == 'create' and image_urls:
+                        # First time syncing, set images
+                        update_images = image_urls
 
-                current_app.logger.info(f"Successfully updated Shopify product {shopify_product_id}")
+                    shopify_service.update_product(
+                        product_id=shopify_product_id,
+                        title=title,
+                        description=description,
+                        price=price,
+                        inventory_quantity=inventory_quantity,
+                        weight=weight,
+                        images=update_images,
+                        tags=tags
+                    )
+
+                    current_app.logger.info(f"Successfully updated Shopify product {shopify_product_id}")
 
             else:
                 # Create new product
