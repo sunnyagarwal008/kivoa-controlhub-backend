@@ -551,9 +551,11 @@ class ShopifyService:
             }
         }
 
-        # Add images if provided
+        # Add images if provided (convert CDN URLs to S3 URLs for Shopify compatibility)
         if images:
-            payload["product"]["images"] = [{"src": img_url} for img_url in images]
+            payload["product"]["images"] = [
+                {"src": self._convert_cdn_to_s3_url(img_url)} for img_url in images
+            ]
 
         url = self._get_api_url('products.json')
         headers = self._get_headers()
@@ -690,9 +692,11 @@ class ShopifyService:
                 delete_img_url = self._get_api_url(f'products/{product_id}/images/{img["id"]}.json')
                 requests.delete(delete_img_url, headers=headers)
 
-            # Add new images
+            # Add new images (convert CDN URLs to S3 URLs for Shopify compatibility)
             for img_url in images:
-                img_payload = {"image": {"src": img_url}}
+                # Convert CDN URL to S3 URL so Shopify can download it
+                s3_url = self._convert_cdn_to_s3_url(img_url)
+                img_payload = {"image": {"src": s3_url}}
                 img_create_url = self._get_api_url(f'products/{product_id}/images.json')
                 requests.post(img_create_url, json=img_payload, headers=headers)
 
@@ -702,16 +706,42 @@ class ShopifyService:
         response = requests.get(get_url, headers=headers)
         return response.json().get('product', {})
 
+    def _convert_cdn_to_s3_url(self, url):
+        """
+        Convert CloudFront CDN URL to direct S3 URL
+        Shopify needs to be able to download images, and CloudFront may have access restrictions
+
+        Args:
+            url (str): Image URL (may be CDN or S3)
+
+        Returns:
+            str: S3 URL
+        """
+        cdn_domain = current_app.config.get('CDN_DOMAIN')
+        bucket_name = current_app.config.get('S3_BUCKET_NAME')
+        region = current_app.config.get('AWS_REGION', 'ap-south-1')
+
+        if cdn_domain and cdn_domain in url:
+            # Extract key from CDN URL: https://{cdn_domain}/{key}
+            key = url.split(f"{cdn_domain}/")[1]
+            # Convert to S3 URL: https://{bucket}.s3.{region}.amazonaws.com/{key}
+            s3_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{key}"
+            current_app.logger.debug(f"Converted CDN URL to S3: {url} -> {s3_url}")
+            return s3_url
+
+        # Already an S3 URL or other format
+        return url
+
     def update_product_images(self, product_id, images):
         """
         Update only the images for a product in Shopify
 
         Args:
             product_id (int): Shopify product ID
-            images (list): List of image URLs to set
+            images (list): List of image URLs to set (can be CDN or S3 URLs)
 
         Returns:
-            dict: Updated Shopify product object
+            dict: Updated Shopify product object with success/failure info
         """
         self._get_config()
 
@@ -727,24 +757,64 @@ class ShopifyService:
             raise Exception(error_msg)
 
         product = response.json().get('product', {})
+        existing_images = product.get('images', [])
 
-        # Delete existing images
-        for img in product.get('images', []):
+        current_app.logger.info(f"Updating images for Shopify product {product_id}: {len(existing_images)} existing, {len(images) if images else 0} new")
+
+        # Delete existing images (ignore 404 errors - image may already be deleted)
+        deleted_count = 0
+        for img in existing_images:
             delete_img_url = self._get_api_url(f'products/{product_id}/images/{img["id"]}.json')
             delete_response = requests.delete(delete_img_url, headers=headers)
-            if delete_response.status_code not in [200, 204]:
+            if delete_response.status_code in [200, 204]:
+                deleted_count += 1
+            elif delete_response.status_code == 404:
+                # Image already deleted, ignore
+                current_app.logger.debug(f"Image {img['id']} already deleted")
+            else:
                 current_app.logger.warning(f"Failed to delete image {img['id']}: {delete_response.text}")
 
-        # Add new images
+        current_app.logger.info(f"Deleted {deleted_count} existing images from Shopify product {product_id}")
+
+        # Add new images (convert CDN URLs to S3 URLs for Shopify compatibility)
+        added_count = 0
+        failed_images = []
+
         if images:
             for img_url in images:
-                img_payload = {"image": {"src": img_url}}
+                # Convert CDN URL to S3 URL so Shopify can download it
+                s3_url = self._convert_cdn_to_s3_url(img_url)
+
+                img_payload = {"image": {"src": s3_url}}
                 img_create_url = self._get_api_url(f'products/{product_id}/images.json')
                 img_response = requests.post(img_create_url, json=img_payload, headers=headers)
-                if img_response.status_code not in [200, 201]:
-                    current_app.logger.warning(f"Failed to add image {img_url}: {img_response.text}")
 
-        current_app.logger.info(f"Successfully updated images for Shopify product: {product_id}")
+                if img_response.status_code in [200, 201]:
+                    added_count += 1
+                    current_app.logger.debug(f"Successfully added image: {s3_url}")
+                else:
+                    failed_images.append({
+                        'original_url': img_url,
+                        's3_url': s3_url,
+                        'error': img_response.text
+                    })
+                    current_app.logger.error(f"Failed to add image {s3_url} (original: {img_url}): {img_response.text}")
+
+        if failed_images:
+            current_app.logger.error(
+                f"Failed to add {len(failed_images)} images to Shopify product {product_id}. "
+                f"This may be due to CloudFront/CDN access restrictions. "
+                f"Shopify needs to be able to download images from the URLs."
+            )
+            # Log the first failed image details for debugging
+            if failed_images:
+                current_app.logger.error(f"First failed image details: {failed_images[0]}")
+
+        current_app.logger.info(
+            f"Image update complete for Shopify product {product_id}: "
+            f"Added {added_count}/{len(images) if images else 0} images, "
+            f"Failed: {len(failed_images)}"
+        )
 
         # Fetch updated product
         response = requests.get(get_url, headers=headers)
