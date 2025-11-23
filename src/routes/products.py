@@ -10,7 +10,6 @@ from src.models import Category, Product, ProductImage, Prompt
 from src.schemas import ProductSchema
 from src.services import sqs_service, s3_service, gemini_service
 from src.services.gemini_service import download_image
-from src.utils.raw_image_utils import delete_raw_image_by_url
 
 products_bp = Blueprint('products', __name__)
 
@@ -721,6 +720,14 @@ def approve_product_image(product_id, image_id):
         image.status = 'approved'
         db.session.commit()
 
+        # Send catalog sync message if product is live (to update images in Shopify)
+        if product.status == 'live':
+            try:
+                sqs_service.send_catalog_sync_message(product.id, action='update_images')
+                current_app.logger.info(f"Sent catalog sync message for product {product.id} after image approval")
+            except Exception as e:
+                current_app.logger.error(f"Failed to send catalog sync message for product {product.id}: {str(e)}")
+
         return jsonify({
             'success': True,
             'message': 'Image approved successfully',
@@ -777,6 +784,14 @@ def reject_product_image(product_id, image_id):
         except Exception as s3_error:
             # Log the error but don't fail the request since DB deletion succeeded
             current_app.logger.error(f"Failed to delete image from S3: {str(s3_error)}")
+
+        # Send catalog sync message if product is live (to update images in Shopify)
+        if product.status == 'live':
+            try:
+                sqs_service.send_catalog_sync_message(product.id, action='update_images')
+                current_app.logger.info(f"Sent catalog sync message for product {product.id} after image deletion")
+            except Exception as e:
+                current_app.logger.error(f"Failed to send catalog sync message for product {product.id}: {str(e)}")
 
         return jsonify({
             'success': True,
@@ -854,6 +869,15 @@ def update_image_status(product_id, image_id):
         # Update image status
         image.status = new_status
         db.session.commit()
+
+        # Send catalog sync message if product is live (to update images in Shopify)
+        # Status changes affect which images are displayed
+        if product.status == 'live':
+            try:
+                sqs_service.send_catalog_sync_message(product.id, action='update_images')
+                current_app.logger.info(f"Sent catalog sync message for product {product.id} after image status update")
+            except Exception as e:
+                current_app.logger.error(f"Failed to send catalog sync message for product {product.id}: {str(e)}")
 
         return jsonify({
             'success': True,
@@ -1046,6 +1070,14 @@ def update_product_stock(product_id):
         # Set inventory to 0 for out_of_stock, 1 for in_stock
         product.inventory = 1 if in_stock else 0
         db.session.commit()
+
+        # Send catalog sync message if product is live
+        if product.status == 'live':
+            try:
+                sqs_service.send_catalog_sync_message(product.id, action='update')
+                current_app.logger.info(f"Sent catalog sync message for product {product.id} after stock update")
+            except Exception as e:
+                current_app.logger.error(f"Failed to send catalog sync message for product {product.id}: {str(e)}")
 
         stock_status = 'in stock' if in_stock else 'out of stock'
         return jsonify({
@@ -1561,6 +1593,14 @@ def update_product_image_priorities(product_id):
         db.session.commit()
 
         current_app.logger.info(f"Updated priorities for {len(updated_images)} images of product {product_id}")
+
+        # Send catalog sync message if product is live (to update image order in Shopify)
+        if product.status == 'live':
+            try:
+                sqs_service.send_catalog_sync_message(product.id, action='update_images')
+                current_app.logger.info(f"Sent catalog sync message for product {product.id} after priority update")
+            except Exception as e:
+                current_app.logger.error(f"Failed to send catalog sync message for product {product.id}: {str(e)}")
 
         return jsonify({
             'success': True,
