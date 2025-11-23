@@ -38,8 +38,11 @@ class CatalogSyncWorker(threading.Thread):
             bool: True if successful, False otherwise
         """
         try:
-            # Fetch product from database
-            product = Product.query.get(product_id)
+            # Expire all cached objects to ensure we get fresh data from database
+            db.session.expire_all()
+
+            # Fetch product from database (fresh query, not from cache)
+            product = db.session.query(Product).filter_by(id=product_id).first()
 
             if not product:
                 current_app.logger.error(f"Product {product_id} not found")
@@ -51,6 +54,7 @@ class CatalogSyncWorker(threading.Thread):
                 return True
 
             current_app.logger.info(f"Syncing product {product_id} to Shopify (action: {action})")
+            current_app.logger.info(f"Product data: SKU={product.sku}, Title='{product.title}', Price={product.price}, Inventory={product.inventory}")
 
             # Get product images (approved images only, ordered by priority)
             product_images = ProductImage.query.filter_by(
