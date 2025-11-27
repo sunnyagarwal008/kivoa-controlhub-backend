@@ -15,14 +15,14 @@ place_order_schema = PlaceOrderSchema()
 
 def _enrich_orders_with_product_images(orders):
     """
-    Enrich orders with product images by adding product_image_url to each line item.
-    Uses a single bulk DB query to fetch all product images for all SKUs.
+    Enrich orders with product data by adding product_id and product_image_url to each line item.
+    Uses a single bulk DB query to fetch all product data for all SKUs.
 
     Args:
         orders (list): List of order dictionaries from Shopify
 
     Returns:
-        list: Orders with product_image_url added to each line item
+        list: Orders with product_id and product_image_url added to each line item
     """
     if not orders:
         return orders
@@ -50,6 +50,7 @@ def _enrich_orders_with_product_images(orders):
     # Join products with their highest priority image
     product_image_data = db.session.query(
         Product.sku,
+        Product.id,
         ProductImage.image_url
     ).join(
         ProductImage, Product.id == ProductImage.product_id
@@ -61,15 +62,23 @@ def _enrich_orders_with_product_images(orders):
         Product.sku.in_(all_skus)
     ).all()
 
-    # Create a mapping of SKU to image URL
-    sku_to_image = {sku: image_url for sku, image_url in product_image_data}
+    # Create a mapping of SKU to product data (id and image URL)
+    sku_to_product_data = {
+        sku: {'product_id': product_id, 'product_image_url': image_url}
+        for sku, product_id, image_url in product_image_data
+    }
 
-    # Enrich each line item with product_image_url
+    # Enrich each line item with product_id and product_image_url
     for order in orders:
         line_items = order.get('line_items', [])
         for item in line_items:
             sku = item.get('sku')
-            item['product_image_url'] = sku_to_image.get(sku) if sku else None
+            if sku and sku in sku_to_product_data:
+                item['product_id'] = sku_to_product_data[sku]['product_id']
+                item['product_image_url'] = sku_to_product_data[sku]['product_image_url']
+            else:
+                item['product_id'] = None
+                item['product_image_url'] = None
 
     return orders
 
