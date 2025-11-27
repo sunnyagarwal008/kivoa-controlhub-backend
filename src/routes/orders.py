@@ -1,15 +1,77 @@
 from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 
 from src.database import db
-from src.models import Product
+from src.models import Product, ProductImage
 from src.schemas import PlaceOrderSchema
 from src.services import shopify_service
 
 orders_bp = Blueprint('orders', __name__)
 
 place_order_schema = PlaceOrderSchema()
+
+
+def _enrich_orders_with_product_images(orders):
+    """
+    Enrich orders with product images by adding product_image_url to each line item.
+    Uses a single bulk DB query to fetch all product images for all SKUs.
+
+    Args:
+        orders (list): List of order dictionaries from Shopify
+
+    Returns:
+        list: Orders with product_image_url added to each line item
+    """
+    if not orders:
+        return orders
+
+    # Collect all unique SKUs from all orders
+    all_skus = set()
+    for order in orders:
+        line_items = order.get('line_items', [])
+        for item in line_items:
+            sku = item.get('sku')
+            if sku:
+                all_skus.add(sku)
+
+    if not all_skus:
+        # No SKUs to lookup, return orders as-is
+        return orders
+
+    # Single bulk query to fetch products and their first image (by priority)
+    # Using a subquery to get the image with lowest priority (highest priority) for each product
+    subquery = db.session.query(
+        ProductImage.product_id,
+        func.min(ProductImage.priority).label('min_priority')
+    ).group_by(ProductImage.product_id).subquery()
+
+    # Join products with their highest priority image
+    product_image_data = db.session.query(
+        Product.sku,
+        ProductImage.image_url
+    ).join(
+        ProductImage, Product.id == ProductImage.product_id
+    ).join(
+        subquery,
+        (ProductImage.product_id == subquery.c.product_id) &
+        (ProductImage.priority == subquery.c.min_priority)
+    ).filter(
+        Product.sku.in_(all_skus)
+    ).all()
+
+    # Create a mapping of SKU to image URL
+    sku_to_image = {sku: image_url for sku, image_url in product_image_data}
+
+    # Enrich each line item with product_image_url
+    for order in orders:
+        line_items = order.get('line_items', [])
+        for item in line_items:
+            sku = item.get('sku')
+            item['product_image_url'] = sku_to_image.get(sku) if sku else None
+
+    return orders
 
 
 @orders_bp.route('/orders', methods=['GET'])
@@ -81,6 +143,9 @@ def get_orders():
         orders = result['orders']
         page_info_data = result['page_info']
 
+        # Enrich orders with product images
+        enriched_orders = _enrich_orders_with_product_images(orders)
+
         # Build pagination response
         pagination = {
             'limit': limit,
@@ -93,9 +158,9 @@ def get_orders():
         return jsonify({
             'success': True,
             'data': {
-                'orders': orders,
+                'orders': enriched_orders,
                 'pagination': pagination,
-                'count': len(orders)
+                'count': len(enriched_orders)
             }
         }), 200
 
