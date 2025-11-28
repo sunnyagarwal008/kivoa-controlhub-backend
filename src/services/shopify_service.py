@@ -1,5 +1,6 @@
 import requests
 from flask import current_app
+from urllib.parse import quote
 
 
 class ShopifyService:
@@ -60,7 +61,9 @@ class ShopifyService:
         self._get_config()
 
         # Search for existing customer by phone number
-        search_url = self._get_api_url(f'customers/search.json?query=phone:{customer_phone}')
+        # URL-encode the phone number to handle special characters and spaces
+        encoded_phone = quote(customer_phone, safe='')
+        search_url = self._get_api_url(f'customers/search.json?query=phone:{encoded_phone}')
         headers = self._get_headers()
 
         current_app.logger.info(f"Searching for existing customer with phone: {customer_phone}")
