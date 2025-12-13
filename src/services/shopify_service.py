@@ -475,7 +475,7 @@ class ShopifyService:
 
     def find_product_by_sku(self, sku):
         """
-        Find a product in Shopify by SKU
+        Find a product in Shopify by SKU using GraphQL API
 
         Args:
             sku (str): Product SKU to search for
@@ -485,32 +485,118 @@ class ShopifyService:
         """
         self._get_config()
 
-        # Search for product by SKU using GraphQL would be better, but REST API works too
-        # We'll search through variants since SKU is stored at variant level
-        url = self._get_api_url(f'products.json?limit=250')
-        headers = self._get_headers()
-
         current_app.logger.info(f"Searching for product with SKU: {sku}")
 
-        # Note: This is a simplified search. For production, consider using GraphQL API
-        # or maintaining a local mapping of SKU to Shopify product ID
-        response = requests.get(url, headers=headers)
+        # Use GraphQL API to search by SKU efficiently
+        graphql_url = self._get_api_url('graphql.json')
+        headers = self._get_headers()
+
+        # GraphQL query to search for product variant by SKU
+        query = """
+        query($sku: String!) {
+          productVariants(first: 1, query: $sku) {
+            edges {
+              node {
+                id
+                sku
+                product {
+                  id
+                  legacyResourceId
+                  title
+                  descriptionHtml
+                  vendor
+                  productType
+                  tags
+                  variants(first: 100) {
+                    edges {
+                      node {
+                        id
+                        legacyResourceId
+                        sku
+                        price
+                        inventoryQuantity
+                        weight
+                        weightUnit
+                      }
+                    }
+                  }
+                  images(first: 10) {
+                    edges {
+                      node {
+                        id
+                        url
+                        altText
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+
+        payload = {
+            "query": query,
+            "variables": {
+                "sku": f"sku:{sku}"
+            }
+        }
+
+        response = requests.post(graphql_url, json=payload, headers=headers)
 
         if response.status_code not in [200, 201]:
-            current_app.logger.error(f"Shopify API error searching products: {response.status_code} - {response.text}")
+            current_app.logger.error(f"Shopify GraphQL API error: {response.status_code} - {response.text}")
             return None
 
-        products = response.json().get('products', [])
+        result = response.json()
 
-        # Search through products and their variants for matching SKU
-        for product in products:
-            for variant in product.get('variants', []):
-                if variant.get('sku') == sku:
-                    current_app.logger.info(f"Found product with SKU {sku}: product_id={product['id']}, variant_id={variant['id']}")
-                    return product
+        # Check for GraphQL errors
+        if 'errors' in result:
+            current_app.logger.error(f"Shopify GraphQL errors: {result['errors']}")
+            return None
 
-        current_app.logger.info(f"No product found with SKU: {sku}")
-        return None
+        # Extract product from GraphQL response
+        edges = result.get('data', {}).get('productVariants', {}).get('edges', [])
+        
+        if not edges:
+            current_app.logger.info(f"No product found with SKU: {sku}")
+            return None
+
+        # Convert GraphQL response to REST API format for compatibility
+        graphql_product = edges[0]['node']['product']
+        
+        # Transform to REST API format
+        product = {
+            'id': graphql_product['legacyResourceId'],
+            'title': graphql_product['title'],
+            'body_html': graphql_product['descriptionHtml'],
+            'vendor': graphql_product['vendor'],
+            'product_type': graphql_product['productType'],
+            'tags': graphql_product['tags'],
+            'variants': [
+                {
+                    'id': v['node']['legacyResourceId'],
+                    'sku': v['node']['sku'],
+                    'price': v['node']['price'],
+                    'inventory_quantity': v['node']['inventoryQuantity'],
+                    'weight': v['node']['weight'],
+                    'weight_unit': v['node']['weightUnit']
+                }
+                for v in graphql_product['variants']['edges']
+            ],
+            'images': [
+                {
+                    'id': img['node']['id'],
+                    'src': img['node']['url'],
+                    'alt': img['node']['altText']
+                }
+                for img in graphql_product['images']['edges']
+            ]
+        }
+
+        current_app.logger.info(f"Found product with SKU {sku}: product_id={product['id']}")
+        return product
 
     def create_product(self, title, description, sku, price, inventory_quantity, weight=None,
                       images=None, tags=None, vendor=None):
