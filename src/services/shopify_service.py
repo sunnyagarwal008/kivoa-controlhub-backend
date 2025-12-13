@@ -515,8 +515,6 @@ class ShopifyService:
                         sku
                         price
                         inventoryQuantity
-                        weight
-                        weightUnit
                       }
                     }
                   }
@@ -546,15 +544,17 @@ class ShopifyService:
         response = requests.post(graphql_url, json=payload, headers=headers)
 
         if response.status_code not in [200, 201]:
-            current_app.logger.error(f"Shopify GraphQL API error: {response.status_code} - {response.text}")
-            return None
+            error_msg = f"Shopify GraphQL API error: {response.status_code} - {response.text}"
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
 
         result = response.json()
 
         # Check for GraphQL errors
         if 'errors' in result:
-            current_app.logger.error(f"Shopify GraphQL errors: {result['errors']}")
-            return None
+            error_msg = f"Shopify GraphQL errors: {result['errors']}"
+            current_app.logger.error(error_msg)
+            raise Exception(error_msg)
 
         # Extract product from GraphQL response
         edges = result.get('data', {}).get('productVariants', {}).get('edges', [])
@@ -579,9 +579,7 @@ class ShopifyService:
                     'id': v['node']['legacyResourceId'],
                     'sku': v['node']['sku'],
                     'price': v['node']['price'],
-                    'inventory_quantity': v['node']['inventoryQuantity'],
-                    'weight': v['node']['weight'],
-                    'weight_unit': v['node']['weightUnit']
+                    'inventory_quantity': v['node']['inventoryQuantity']
                 }
                 for v in graphql_product['variants']['edges']
             ],
