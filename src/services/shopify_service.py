@@ -16,7 +16,7 @@ class ShopifyService:
         if not self.store_url:
             self.store_url = current_app.config.get('SHOPIFY_STORE_URL')
             self.access_token = current_app.config.get('SHOPIFY_ACCESS_TOKEN')
-            self.api_version = current_app.config.get('SHOPIFY_API_VERSION', '2024-01')
+            self.api_version = current_app.config.get('SHOPIFY_API_VERSION', '2024-04')
 
             # Ensure store URL has https:// scheme
             if self.store_url and not self.store_url.startswith(('http://', 'https://')):

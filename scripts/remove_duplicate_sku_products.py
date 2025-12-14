@@ -36,7 +36,7 @@ class ShopifyDuplicateRemover:
         """Get Shopify configuration from environment variables"""
         self.store_url = os.getenv('SHOPIFY_STORE_URL')
         self.access_token = os.getenv('SHOPIFY_ACCESS_TOKEN')
-        self.api_version = os.getenv('SHOPIFY_API_VERSION', '2024-01')
+        self.api_version = os.getenv('SHOPIFY_API_VERSION', '2024-04')
 
         if self.store_url and not self.store_url.startswith(('http://', 'https://')):
             self.store_url = f'https://{self.store_url}'
