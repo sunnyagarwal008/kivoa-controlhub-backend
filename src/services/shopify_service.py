@@ -625,7 +625,6 @@ class ShopifyService:
                 "body_html": description,
                 "vendor": vendor or "Kivoa",
                 "product_type": product_type or "",
-                "product_category": "Apparel & Accessories > Jewelry",
                 "tags": tags or "",
                 "variants": [
                     {
@@ -659,7 +658,15 @@ class ShopifyService:
             raise Exception(error_msg)
 
         product = response.json().get('product', {})
-        current_app.logger.info(f"Successfully created Shopify product: {product.get('id')} (SKU: {sku})")
+        product_id = product.get('id')
+        current_app.logger.info(f"Successfully created Shopify product: {product_id} (SKU: {sku})")
+
+        # Update product category using GraphQL (REST API doesn't support this)
+        try:
+            self._update_product_category_graphql(product_id)
+            current_app.logger.info(f"Successfully set product category to 'Apparel & Accessories > Jewelry' for product {product_id}")
+        except Exception as e:
+            current_app.logger.warning(f"Failed to set product category for product {product_id}: {str(e)}")
 
         return product
 
@@ -718,7 +725,6 @@ class ShopifyService:
 
         if product_type is not None:
             payload["product"]["product_type"] = product_type
-            payload["product"]["product_category"] = "Apparel & Accessories > Jewelry"
 
         # Handle variant updates (price, inventory, weight)
         # First, get the product to find the variant ID
@@ -852,9 +858,91 @@ class ShopifyService:
 
         current_app.logger.info(f"✓ Successfully updated Shopify product: {product_id}")
 
+        # Update product category using GraphQL if product_type was provided
+        if product_type is not None:
+            try:
+                self._update_product_category_graphql(product_id)
+                current_app.logger.info(f"Successfully set product category to 'Apparel & Accessories > Jewelry' for product {product_id}")
+            except Exception as e:
+                current_app.logger.warning(f"Failed to set product category for product {product_id}: {str(e)}")
+
         # Fetch updated product
         response = requests.get(get_url, headers=headers)
         return response.json().get('product', {})
+
+    def _update_product_category_graphql(self, product_id):
+        """
+        Update product category using GraphQL API
+        REST API doesn't support setting product category, so we use GraphQL
+
+        Args:
+            product_id (int): Shopify product ID (REST API format)
+
+        Returns:
+            dict: GraphQL response
+        """
+        self._get_config()
+
+        # Convert REST API product ID to GraphQL GID
+        product_gid = f"gid://shopify/Product/{product_id}"
+        
+        # Taxonomy category GID for "Apparel & Accessories > Jewelry"
+        category_gid = "gid://shopify/TaxonomyCategory/aa-6"
+
+        # GraphQL mutation to update product category
+        mutation = """
+        mutation productUpdate($input: ProductInput!) {
+          productUpdate(input: $input) {
+            product {
+              id
+              category {
+                id
+                fullName
+              }
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        """
+
+        variables = {
+            "input": {
+                "id": product_gid,
+                "productCategory": category_gid
+            }
+        }
+
+        graphql_url = self._get_api_url('graphql.json')
+        headers = self._get_headers()
+
+        payload = {
+            "query": mutation,
+            "variables": variables
+        }
+
+        response = requests.post(graphql_url, json=payload, headers=headers)
+
+        if response.status_code not in [200, 201]:
+            error_msg = f"Shopify GraphQL API error: {response.status_code} - {response.text}"
+            raise Exception(error_msg)
+
+        result = response.json()
+
+        # Check for GraphQL errors
+        if 'errors' in result:
+            error_msg = f"Shopify GraphQL errors: {result['errors']}"
+            raise Exception(error_msg)
+
+        # Check for user errors
+        user_errors = result.get('data', {}).get('productUpdate', {}).get('userErrors', [])
+        if user_errors:
+            error_msg = f"Shopify GraphQL user errors: {user_errors}"
+            raise Exception(error_msg)
+
+        return result
 
     def _convert_cdn_to_s3_url(self, url):
         """
