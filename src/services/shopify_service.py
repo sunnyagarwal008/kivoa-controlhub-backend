@@ -883,6 +883,8 @@ class ShopifyService:
         """
         self._get_config()
 
+        current_app.logger.info(f"Using Shopify API version: {self.api_version}")
+
         # Convert REST API product ID to GraphQL GID
         product_gid = f"gid://shopify/Product/{product_id}"
         
