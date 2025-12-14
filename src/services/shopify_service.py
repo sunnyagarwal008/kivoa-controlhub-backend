@@ -893,9 +893,10 @@ class ShopifyService:
 
         # GraphQL mutation to update product category using productSet
         # Note: productSet is available in API version 2024-04+
+        # In API 2024-07, product ID is included in the input, not as a separate identifier
         mutation = """
-        mutation productSet($identifier: ProductSetIdentifiers, $input: ProductSetInput!, $synchronous: Boolean) {
-          productSet(identifier: $identifier, input: $input, synchronous: $synchronous) {
+        mutation productSet($input: ProductSetInput!, $synchronous: Boolean) {
+          productSet(input: $input, synchronous: $synchronous) {
             product {
               id
               category {
@@ -912,10 +913,8 @@ class ShopifyService:
         """
 
         variables = {
-            "identifier": {
-                "id": product_gid
-            },
             "input": {
+                "id": product_gid,
                 "category": category_gid
             },
             "synchronous": True
