@@ -597,7 +597,7 @@ class ShopifyService:
         return product
 
     def create_product(self, title, description, sku, price, inventory_quantity, weight=None,
-                      images=None, tags=None, vendor=None):
+                      images=None, tags=None, vendor=None, product_type=None):
         """
         Create a new product in Shopify
 
@@ -611,6 +611,7 @@ class ShopifyService:
             images (list): List of image URLs (optional)
             tags (str): Comma-separated tags (optional)
             vendor (str): Vendor name (optional)
+            product_type (str): Product type/category (optional)
 
         Returns:
             dict: Created Shopify product object
@@ -623,7 +624,8 @@ class ShopifyService:
                 "title": title,
                 "body_html": description,
                 "vendor": vendor or "Kivoa",
-                "product_type": "",
+                "product_type": product_type or "",
+                "product_category": "Apparel & Accessories > Jewelry",
                 "tags": tags or "",
                 "variants": [
                     {
@@ -662,7 +664,7 @@ class ShopifyService:
         return product
 
     def update_product(self, product_id, title=None, description=None, price=None,
-                      inventory_quantity=None, weight=None, images=None, tags=None):
+                      inventory_quantity=None, weight=None, images=None, tags=None, product_type=None):
         """
         Update an existing product in Shopify
 
@@ -675,6 +677,7 @@ class ShopifyService:
             weight (int): Weight in grams (optional)
             images (list): List of image URLs (optional)
             tags (str): Comma-separated tags (optional)
+            product_type (str): Product type/category (optional)
 
         Returns:
             dict: Updated Shopify product object
@@ -712,6 +715,10 @@ class ShopifyService:
 
         if tags is not None:
             payload["product"]["tags"] = tags
+
+        if product_type is not None:
+            payload["product"]["product_type"] = product_type
+            payload["product"]["product_category"] = "Apparel & Accessories > Jewelry"
 
         # Handle variant updates (price, inventory, weight)
         # First, get the product to find the variant ID

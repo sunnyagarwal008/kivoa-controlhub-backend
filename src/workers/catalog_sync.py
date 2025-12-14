@@ -73,6 +73,7 @@ class CatalogSyncWorker(threading.Thread):
             inventory_quantity = product.inventory or 0
             weight = product.weight
             tags = product.tags or ""
+            product_type = product.category_ref.name if product.category_ref else None
 
             # Check if product already exists in Shopify
             existing_product = shopify_service.find_product_by_sku(sku)
@@ -105,7 +106,8 @@ class CatalogSyncWorker(threading.Thread):
                         inventory_quantity=inventory_quantity,
                         weight=weight,
                         images=update_images,
-                        tags=tags
+                        tags=tags,
+                        product_type=product_type
                     )
 
                     current_app.logger.info(f"Successfully updated Shopify product {shopify_product_id}")
@@ -123,7 +125,8 @@ class CatalogSyncWorker(threading.Thread):
                     weight=weight,
                     images=image_urls if image_urls else None,
                     tags=tags,
-                    vendor="Kivoa"
+                    vendor="Kivoa",
+                    product_type=product_type
                 )
 
                 current_app.logger.info(f"Successfully created Shopify product {shopify_product['id']}")
