@@ -891,10 +891,11 @@ class ShopifyService:
         # Taxonomy category GID for "Apparel & Accessories > Jewelry"
         category_gid = "gid://shopify/TaxonomyCategory/aa-6"
 
-        # GraphQL mutation to update product category
+        # GraphQL mutation to update product category using productSet
+        # Note: productSet is available in API version 2024-04+
         mutation = """
-        mutation productUpdate($input: ProductInput!) {
-          productUpdate(input: $input) {
+        mutation productSet($identifier: ProductSetIdentifiers!, $input: ProductSetInput!, $synchronous: Boolean) {
+          productSet(identifier: $identifier, input: $input, synchronous: $synchronous) {
             product {
               id
               category {
@@ -911,10 +912,13 @@ class ShopifyService:
         """
 
         variables = {
+            "identifier": {
+                "productId": product_gid
+            },
             "input": {
-                "id": product_gid,
-                "productCategory": category_gid
-            }
+                "category": category_gid
+            },
+            "synchronous": True
         }
 
         graphql_url = self._get_api_url('graphql.json')
