@@ -142,18 +142,42 @@ class ShopifyService:
         """
         self._get_config()
 
+        # Look up the product variant by SKU to get variant_id for inventory tracking
+        variant_id = None
+        product = self.find_product_by_sku(sku)
+        if product:
+            # Find the matching variant by SKU
+            for variant in product.get('variants', []):
+                if variant.get('sku') == sku:
+                    variant_id = variant.get('id')
+                    current_app.logger.info(f"Found variant_id {variant_id} for SKU: {sku}")
+                    break
+        
+        if not variant_id:
+            current_app.logger.warning(f"No variant found for SKU: {sku}. Creating custom line item (inventory will NOT be tracked).")
+
         # Construct draft order payload
+        # Use variant_id if found to link to actual product for inventory tracking
+        if variant_id:
+            line_item = {
+                "variant_id": variant_id,
+                "quantity": quantity,
+                "price": str(per_unit_price),
+                "taxable": False  # Mark as non-taxable since price is tax-inclusive
+            }
+        else:
+            # Fallback to custom line item (no inventory tracking)
+            line_item = {
+                "title": title,
+                "sku": sku,
+                "quantity": quantity,
+                "price": str(per_unit_price),
+                "taxable": False  # Mark as non-taxable since price is tax-inclusive
+            }
+
         payload = {
             "draft_order": {
-                "line_items": [
-                    {
-                        "title": title,
-                        "sku": sku,
-                        "quantity": quantity,
-                        "price": str(per_unit_price),
-                        "taxable": False  # Mark as non-taxable since price is tax-inclusive
-                    }
-                ],
+                "line_items": [line_item],
                 "customer": {
                     "id": customer_id
                 },
