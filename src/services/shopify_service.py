@@ -249,7 +249,7 @@ class ShopifyService:
 
     def fulfill_order(self, order_id):
         """
-        Fulfill an order in Shopify
+        Fulfill an order in Shopify using the Fulfillment Orders API
 
         Args:
             order_id (int): Order ID to fulfill
@@ -258,54 +258,73 @@ class ShopifyService:
             dict: Fulfillment response
         """
         self._get_config()
-
-        # First, get the order to retrieve line items
-        order_url = self._get_api_url(f'orders/{order_id}.json')
         headers = self._get_headers()
 
-        current_app.logger.info(f"Retrieving order details for fulfillment: {order_id}")
+        # Step 1: Get fulfillment orders for this order
+        fulfillment_orders_url = self._get_api_url(f'orders/{order_id}/fulfillment_orders.json')
 
-        response = requests.get(order_url, headers=headers)
+        current_app.logger.info(f"Retrieving fulfillment orders for order: {order_id}")
+
+        response = requests.get(fulfillment_orders_url, headers=headers)
 
         if response.status_code not in [200, 201]:
-            error_msg = f"Shopify API error retrieving order: {response.status_code} - {response.text}"
+            error_msg = f"Shopify API error retrieving fulfillment orders: {response.status_code} - {response.text}"
             current_app.logger.error(error_msg)
             raise Exception(error_msg)
 
-        order = response.json().get('order', {})
+        fulfillment_orders = response.json().get('fulfillment_orders', [])
 
-        # Get all line items for fulfillment
-        line_items = []
-        for item in order.get('line_items', []):
-            line_items.append({
-                "id": item['id'],
-                "quantity": item['quantity']
-            })
+        if not fulfillment_orders:
+            current_app.logger.warning(f"No fulfillment orders found for order: {order_id}")
+            return None
 
-        # Create fulfillment payload
-        payload = {
-            "fulfillment": {
-                "line_items": line_items,
-                "notify_customer": False
+        # Step 2: Fulfill each fulfillment order that is open
+        fulfillments = []
+        for fo in fulfillment_orders:
+            fo_id = fo.get('id')
+            fo_status = fo.get('status')
+
+            # Only fulfill orders that are open or in_progress
+            if fo_status not in ['open', 'in_progress']:
+                current_app.logger.info(f"Skipping fulfillment order {fo_id} with status: {fo_status}")
+                continue
+
+            # Build line items for this fulfillment order
+            line_items_by_fulfillment_order = [{
+                "fulfillment_order_id": fo_id,
+                "fulfillment_order_line_items": [
+                    {"id": item['id'], "quantity": item['quantity']}
+                    for item in fo.get('line_items', [])
+                ]
+            }]
+
+            # Create fulfillment payload using new API format
+            payload = {
+                "fulfillment": {
+                    "line_items_by_fulfillment_order": line_items_by_fulfillment_order,
+                    "notify_customer": False
+                }
             }
-        }
 
-        # Create fulfillment
-        fulfillment_url = self._get_api_url(f'orders/{order_id}/fulfillments.json')
+            # Create fulfillment using the new endpoint
+            fulfillment_url = self._get_api_url('fulfillments.json')
 
-        current_app.logger.info(f"Fulfilling Shopify order: {order_id}")
+            current_app.logger.info(f"Fulfilling fulfillment order {fo_id} for order: {order_id}")
 
-        response = requests.post(fulfillment_url, json=payload, headers=headers)
+            response = requests.post(fulfillment_url, json=payload, headers=headers)
 
-        if response.status_code not in [200, 201]:
-            error_msg = f"Shopify API error fulfilling order: {response.status_code} - {response.text}"
-            current_app.logger.error(error_msg)
-            raise Exception(error_msg)
+            if response.status_code not in [200, 201]:
+                error_msg = f"Shopify API error fulfilling order: {response.status_code} - {response.text}"
+                current_app.logger.error(error_msg)
+                raise Exception(error_msg)
 
-        fulfillment = response.json()
+            fulfillment = response.json()
+            fulfillments.append(fulfillment)
+            current_app.logger.info(f"Successfully fulfilled fulfillment order {fo_id}")
+
         current_app.logger.info(f"Successfully fulfilled order: {order_id}")
 
-        return fulfillment
+        return {"fulfillments": fulfillments}
 
     def create_order(self, sku, title, quantity, per_unit_price, shipping_charges,
                     customer_name, customer_phone, customer_address):
