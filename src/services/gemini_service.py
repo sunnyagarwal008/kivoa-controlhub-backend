@@ -62,12 +62,13 @@ class GeminiService:
         if not os.path.exists(output_file):
             raise FileNotFoundError(f"Generated image file not found at {output_file}")
 
-    def generate_title_and_description(self, image_path):
+    def generate_title_and_description(self, image_path, product_category='jewelry'):
         """
         Generate product title and description from an image using Gemini
 
         Args:
             image_path: Path to the product image file
+            product_category: Category of the product (e.g., 'rings', 'necklaces', 'earrings', 'bracelets')
 
         Returns:
             dict: Dictionary with 'title' and 'description' keys
@@ -79,22 +80,32 @@ class GeminiService:
 
         mime_type = _get_mime_type(image_path)
 
-        prompt = """Analyze this product image and generate:
-1. A concise, SEO-friendly product title (max 100 characters) suitable for Shopify
-2. A product description with the following structure:
-   - A brief summary paragraph (2-3 sentences) that captures the essence of the product
-   - Followed by 4-6 bullet points highlighting key features, benefits, or specifications
+        prompt = f"""You are analyzing a {product_category} product image for a artificial jewelry e-commerce catalog. Generate:
+
+1. A compelling, SEO-friendly product title short and sweet (40 - 80 characters) that includes:
+   - Type of jewelry (ring, necklace, earrings, etc.)
+   - Distinctive design feature
+
+2. A rich, presentable product description in HTML format with:
+   - Opening paragraph (2-3 sentences): Capture the essence, beauty, and appeal of the piece
+   - Key Details section with 4-6 bullet points covering:     
+     * Design & Craftsmanship (style, finish, unique features)
+     * Dimensions & Specifications (if visible)
+     * Occasion & Styling suggestions
+     * Care & Quality assurance
 
 Format your response EXACTLY as:
 TITLE: [your title here]
-DESCRIPTION: [summary paragraph here]
+DESCRIPTION: <p>[Opening paragraph with emotional appeal and key highlights]</p>
 
-• [bullet point 1]
-• [bullet point 2]
-• [bullet point 3]
-• [bullet point 4]
+<ul>
+<li><strong>Design:</strong> [design style, craftsmanship details]</li>
+<li><strong>Specifications:</strong> [Anti Tarnish, Skin Safe, Hypoallergenic]</li>
+<li><strong>Perfect For:</strong> [occasions, styling suggestions]</li>
+<li><strong>Care:</strong> [care instructions or quality notes]</li>
+</ul>
 
-Make the title catchy and include key product attributes. Make the description engaging, informative, and persuasive for e-commerce. Use bullet points (•) for the list items."""
+Use elegant, luxurious language appropriate for fine jewelry. Be specific about visible details but don't invent specifications you cannot see. Focus on what makes this piece special and desirable"""
 
         contents = [
             types.Part(inline_data=types.Blob(data=image_data, mime_type=mime_type)),

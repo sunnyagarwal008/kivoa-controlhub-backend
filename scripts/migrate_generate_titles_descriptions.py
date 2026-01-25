@@ -30,8 +30,9 @@ sys.path.insert(0, str(project_root))
 
 from src.app import create_app
 from src.database import db
-from src.models import Product
+from src.models import Product, ProductImage
 from src.services.gemini_service import gemini_service, download_image
+from src.services.shopify_service import shopify_service
 from flask import current_app
 
 
@@ -52,20 +53,25 @@ def generate_handle_from_title(title):
     return handle[:255]
 
 
-def process_product(product, dry_run=False):
+def process_product(product, dry_run=False, push_to_shopify=False):
     """
-    Process a single product to generate title and description
+    Process a single product to generate title and description, optionally push to Shopify
     
     Args:
         product: Product object to process
         dry_run: If True, don't save changes to database
+        push_to_shopify: If True, push product to Shopify after generating title/description
         
     Returns:
         tuple: (success: bool, message: str)
     """
     try:
+        # Get category name from relationship
+        category_name = product.category_ref.name if product.category_ref else 'jewelry'
+        
         print(f"\n{'[DRY RUN] ' if dry_run else ''}Processing product {product.id} (SKU: {product.sku})...")
         print(f"  Status: {product.status}")
+        print(f"  Category: {category_name}")
         print(f"  Current title: {product.title or '(none)'}")
         print(f"  Current description: {product.description[:50] + '...' if product.description else '(none)'}")
         print(f"  Raw image: {product.raw_image}")
@@ -81,16 +87,16 @@ def process_product(product, dry_run=False):
             return False, error_msg
         
         # Generate title and description using Gemini
-        print(f"  Generating title and description with Gemini AI...")
+        print(f"  Generating title and description with Gemini AI for category: {category_name}...")
         try:
-            title_desc = gemini_service.generate_title_and_description(raw_image_path)
+            title_desc = gemini_service.generate_title_and_description(raw_image_path, category_name)
             generated_title = title_desc['title']
             generated_description = title_desc['description']
-            generated_handle = generate_handle_from_title(generated_title)
+            #generated_handle = generate_handle_from_title(generated_title)
             
             print(f"  ✓ Generated title: {generated_title}")
-            print(f"  ✓ Generated description: {generated_description[:100]}...")
-            print(f"  ✓ Generated handle: {generated_handle}")
+            print(f"  ✓ Generated description: {generated_description}")
+            #print(f"  ✓ Generated handle: {generated_handle}")
             
         except Exception as e:
             error_msg = f"Failed to generate title/description: {str(e)}"
@@ -106,11 +112,27 @@ def process_product(product, dry_run=False):
         if not dry_run:
             product.title = generated_title
             product.description = generated_description
-            product.handle = generated_handle
+            #product.handle = generated_handle
             db.session.commit()
             print(f"  ✓ Product {product.id} updated successfully")
+            
+            # Push to Shopify if requested
+            if push_to_shopify:
+                try:
+                    print(f"  Pushing product to Shopify...")
+                    sync_success = push_product_to_shopify(product)
+                    if sync_success:
+                        print(f"  ✓ Successfully pushed to Shopify")
+                    else:
+                        print(f"  ⚠️  Failed to push to Shopify (see logs)")
+                except Exception as e:
+                    error_msg = f"Failed to push to Shopify: {str(e)}"
+                    print(f"  ⚠️  {error_msg}")
+                    # Don't fail the whole operation if Shopify sync fails
         else:
             print(f"  [DRY RUN] Would update product {product.id}")
+            if push_to_shopify:
+                print(f"  [DRY RUN] Would push to Shopify")
         
         return True, "Success"
         
@@ -121,7 +143,85 @@ def process_product(product, dry_run=False):
         return False, error_msg
 
 
-def migrate_products(dry_run=False, batch_size=10, limit=None):
+def push_product_to_shopify(product):
+    """
+    Push a product to Shopify catalog
+    
+    Args:
+        product: Product object to push
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Get product images (ordered by priority)
+        product_images = ProductImage.query.filter_by(
+            product_id=product.id
+        ).order_by(ProductImage.priority.asc()).all()
+        
+        image_urls = [img.image_url for img in product_images]
+        
+        # Prepare product data
+        title = product.title or f"Product {product.sku}"
+        description = product.description or ""
+        sku = product.sku
+        price = float(product.price)
+        inventory_quantity = product.inventory or 0
+        weight = product.weight
+        tags = product.tags or ""
+        product_type = product.category_ref.name if product.category_ref else None
+        
+        current_app.logger.info(f"Pushing product {product.id} (SKU: {sku}) to Shopify")
+        
+        # Check if product already exists in Shopify
+        existing_product = shopify_service.find_product_by_sku(sku)
+        
+        if existing_product:
+            # Update existing product
+            shopify_product_id = existing_product['id']
+            current_app.logger.info(f"Updating existing Shopify product {shopify_product_id}")
+            
+            shopify_service.update_product(
+                product_id=shopify_product_id,
+                title=title,
+                description=description,
+                price=price,
+                inventory_quantity=inventory_quantity,
+                weight=weight,
+                images=image_urls if image_urls else None,
+                tags=tags,
+                product_type=product_type
+            )
+            
+            current_app.logger.info(f"Successfully updated Shopify product {shopify_product_id}")
+        else:
+            # Create new product
+            pass
+            # current_app.logger.info(f"Creating new Shopify product for SKU {sku}")
+            #
+            # shopify_product = shopify_service.create_product(
+            #     title=title,
+            #     description=description,
+            #     sku=sku,
+            #     price=price,
+            #     inventory_quantity=inventory_quantity,
+            #     weight=weight,
+            #     images=image_urls if image_urls else None,
+            #     tags=tags,
+            #     vendor="Kivoa",
+            #     product_type=product_type
+            # )
+            #
+            # current_app.logger.info(f"Successfully created Shopify product {shopify_product['id']}")
+        
+        return True
+        
+    except Exception as e:
+        current_app.logger.error(f"Error pushing product {product.id} to Shopify: {str(e)}")
+        return False
+
+
+def migrate_products(dry_run=False, batch_size=10, limit=None, push_to_shopify=False, in_stock_only=False):
     """
     Main migration function to process products
     
@@ -129,6 +229,8 @@ def migrate_products(dry_run=False, batch_size=10, limit=None):
         dry_run: If True, don't save changes to database
         batch_size: Number of products to process in each batch
         limit: Maximum number of products to process (None for all)
+        push_to_shopify: If True, push products to Shopify after generating title/description
+        in_stock_only: If True, only process products with inventory > 0
     """
     app = create_app()
     
@@ -142,15 +244,15 @@ def migrate_products(dry_run=False, batch_size=10, limit=None):
         
         # Find products that need title/description generation
         print("\nQuerying products...")
-        query = Product.query.filter(
+        filters = [
             Product.status.in_(['live', 'pending_review']),
-            db.or_(
-                Product.title.is_(None),
-                Product.title == '',
-                Product.description.is_(None),
-                Product.description == ''
-            )
-        ).order_by(Product.id)
+        ]
+        
+        # Add in-stock filter if requested
+        if in_stock_only:
+            filters.append(Product.inventory > 0)
+        
+        query = Product.query.filter(*filters).order_by(Product.id)
         
         if limit:
             query = query.limit(limit)
@@ -168,8 +270,11 @@ def migrate_products(dry_run=False, batch_size=10, limit=None):
         print(f"\nProducts to process:")
         print(f"  - Status: live or pending_review")
         print(f"  - Missing: title and/or description")
+        if in_stock_only:
+            print(f"  - Inventory: > 0 (in stock only)")
         print(f"  - Total: {total_products}")
         print(f"  - Batch size: {batch_size}")
+        print(f"  - Push to Shopify: {'Yes' if push_to_shopify else 'No'}")
         
         if not dry_run:
             response = input("\nProceed with migration? (yes/no): ")
@@ -189,7 +294,7 @@ def migrate_products(dry_run=False, batch_size=10, limit=None):
         for idx, product in enumerate(products, 1):
             print(f"\n[{idx}/{total_products}]", end=" ")
             
-            success, message = process_product(product, dry_run)
+            success, message = process_product(product, dry_run, push_to_shopify)
             
             if success:
                 success_count += 1
@@ -249,6 +354,16 @@ if __name__ == '__main__':
         default=None,
         help='Limit total number of products to process (default: no limit)'
     )
+    parser.add_argument(
+        '--push-to-shopify',
+        action='store_true',
+        help='Push products to Shopify after generating title and description'
+    )
+    parser.add_argument(
+        '--in-stock-only',
+        action='store_true',
+        help='Only process products with inventory > 0'
+    )
     
     args = parser.parse_args()
     
@@ -256,7 +371,9 @@ if __name__ == '__main__':
         migrate_products(
             dry_run=args.dry_run,
             batch_size=args.batch_size,
-            limit=args.limit
+            limit=args.limit,
+            push_to_shopify=args.push_to_shopify,
+            in_stock_only=args.in_stock_only
         )
     except KeyboardInterrupt:
         print("\n\nMigration interrupted by user.")

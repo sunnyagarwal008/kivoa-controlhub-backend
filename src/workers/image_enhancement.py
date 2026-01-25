@@ -62,7 +62,7 @@ class WorkerThread(threading.Thread):
                 # Step 1: Generate title and description using Gemini
                 current_app.logger.info(f"Generating title and description for product {product_id}")
                 try:
-                    title_desc = gemini_service.generate_title_and_description(raw_image)
+                    title_desc = gemini_service.generate_title_and_description(raw_image, category_name)
                     product.title = title_desc['title']
                     product.description = title_desc['description']
                     # Generate handle from title (lowercase, replace spaces with hyphens)
