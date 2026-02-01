@@ -12,6 +12,7 @@ class Prompt(db.Model):
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
     type = db.Column(db.String(100), nullable=True)  # e.g., 'model_hand', 'satin', 'mirror' for rings
     tags = db.Column(db.String(500), nullable=True)  # Comma-separated tags
+    is_white_background = db.Column(db.Boolean, nullable=False, default=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     is_default = db.Column(db.Boolean, nullable=False, default=False)  # Only one prompt can be default per category
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -38,6 +39,7 @@ class Prompt(db.Model):
             'category': self.category.name if self.category else None,
             'type': self.type,
             'tags': self.tags,
+            'is_white_background': self.is_white_background,
             'is_active': self.is_active,
             'is_default': self.is_default,
             'created_at': self.created_at.isoformat(),

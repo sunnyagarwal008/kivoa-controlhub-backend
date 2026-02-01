@@ -162,6 +162,7 @@ class ProductImage(db.Model):
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending, approved, rejected
     priority = db.Column(db.Integer, nullable=False, default=0)  # Lower number = higher priority
     prompt_id = db.Column(db.Integer, db.ForeignKey('prompts.id'), nullable=True)  # Reference to the prompt used for AI generation
+    is_white_background = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -180,6 +181,7 @@ class ProductImage(db.Model):
             'status': self.status,
             'priority': self.priority,
             'prompt_id': self.prompt_id,
+            'is_white_background': self.is_white_background,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

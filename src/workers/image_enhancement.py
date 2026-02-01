@@ -146,7 +146,8 @@ class WorkerThread(threading.Thread):
                             product_id=product_id,
                             image_url=image_url,
                             status='pending',
-                            prompt_id=prompt_id
+                            prompt_id=prompt_id,
+                            is_white_background=prompt_obj.is_white_background if prompt_obj else False
                         )
                         db.session.add(product_image)
 

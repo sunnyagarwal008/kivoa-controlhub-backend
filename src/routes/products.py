@@ -1225,7 +1225,8 @@ def upload_product_image(product_id):
         product_image = ProductImage(
             product_id=product_id,
             image_url=uploaded_image_url,
-            status='approved'
+            status='approved',
+            is_white_background=False
         )
         db.session.add(product_image)
         db.session.commit()
@@ -1392,7 +1393,8 @@ def generate_product_image(product_id):
             product_id=product_id,
             image_url=image_url,
             status='pending',
-            prompt_id=selected_prompt_obj.id if selected_prompt_obj else None
+            prompt_id=selected_prompt_obj.id if selected_prompt_obj else None,
+            is_white_background=selected_prompt_obj.is_white_background if selected_prompt_obj else False
         )
         db.session.add(product_image)
         db.session.commit()
