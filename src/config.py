@@ -41,6 +41,17 @@ class Config:
     SHOPIFY_ACCESS_TOKEN = os.getenv('SHOPIFY_ACCESS_TOKEN')
     SHOPIFY_API_VERSION = os.getenv('SHOPIFY_API_VERSION', '2024-07')
 
+    # Amazon Seller Central Configuration (India)
+    AMAZON_SELLER_ID = os.getenv('AMAZON_SELLER_ID')
+    AMAZON_MARKETPLACE_ID = os.getenv('AMAZON_MARKETPLACE_ID', 'A21TJRUUN4KGV')  # India marketplace
+    AMAZON_LWA_CLIENT_ID = os.getenv('AMAZON_LWA_CLIENT_ID')
+    AMAZON_LWA_CLIENT_SECRET = os.getenv('AMAZON_LWA_CLIENT_SECRET')
+    AMAZON_LWA_REFRESH_TOKEN = os.getenv('AMAZON_LWA_REFRESH_TOKEN')
+    AMAZON_AWS_ACCESS_KEY = os.getenv('AMAZON_AWS_ACCESS_KEY')
+    AMAZON_AWS_SECRET_KEY = os.getenv('AMAZON_AWS_SECRET_KEY')
+    AMAZON_REGION = os.getenv('AMAZON_REGION', 'eu-west-1')  # Europe region for India marketplace
+    AMAZON_ENDPOINT = os.getenv('AMAZON_ENDPOINT', 'https://sellingpartnerapi-eu.amazon.com')
+
     # JSON Configuration
     JSON_SORT_KEYS = False
 

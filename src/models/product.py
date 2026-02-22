@@ -236,3 +236,50 @@ class PDFCatalog(db.Model):
             'updated_at': self.updated_at.isoformat()
         }
 
+
+class ProductChannel(db.Model):
+    """Product Channel model for storing product sync information across different sales channels"""
+
+    __tablename__ = 'product_channels'
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    channel_name = db.Column(db.String(50), nullable=False)  # e.g., 'shopify', 'amazon', 'flipkart'
+    channel_product_id = db.Column(db.String(255), nullable=True)  # External channel's product ID
+    channel_listing_id = db.Column(db.String(255), nullable=True)  # External channel's listing/SKU ID
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending, active, inactive, error
+    sync_status = db.Column(db.String(20), nullable=False, default='pending')  # pending, synced, failed
+    last_synced_at = db.Column(db.DateTime, nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    channel_data = db.Column(db.JSON, nullable=True)  # Store channel-specific data as JSON
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship with Product
+    product = db.relationship('Product', backref='product_channels', lazy=True)
+
+    # Unique constraint: one product can only be synced once per channel
+    __table_args__ = (
+        db.UniqueConstraint('product_id', 'channel_name', name='unique_product_channel'),
+    )
+
+    def __repr__(self):
+        return f'<ProductChannel {self.id} - Product {self.product_id} on {self.channel_name}>'
+
+    def to_dict(self):
+        """Convert product channel object to dictionary"""
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'channel_name': self.channel_name,
+            'channel_product_id': self.channel_product_id,
+            'channel_listing_id': self.channel_listing_id,
+            'status': self.status,
+            'sync_status': self.sync_status,
+            'last_synced_at': self.last_synced_at.isoformat() if self.last_synced_at else None,
+            'error_message': self.error_message,
+            'channel_data': self.channel_data,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+

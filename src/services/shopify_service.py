@@ -144,27 +144,59 @@ class ShopifyService:
 
         # Look up the product variant by SKU to get variant_id for inventory tracking
         variant_id = None
+        variant_price = None
         product = self.find_product_by_sku(sku)
         if product:
             # Find the matching variant by SKU
             for variant in product.get('variants', []):
                 if variant.get('sku') == sku:
                     variant_id = variant.get('id')
-                    current_app.logger.info(f"Found variant_id {variant_id} for SKU: {sku}")
+                    variant_price = float(variant.get('price', 0))
+                    current_app.logger.info(f"Found variant_id {variant_id} for SKU: {sku}, variant price: {variant_price}")
                     break
-        
+
         if not variant_id:
             current_app.logger.warning(f"No variant found for SKU: {sku}. Creating custom line item (inventory will NOT be tracked).")
 
         # Construct draft order payload
-        # Use variant_id if found to link to actual product for inventory tracking
+        # Use variant_id if found to link to actual product for inventory tracking.
+        # NOTE: Shopify ignores the 'price' field on variant-based line items and uses
+        # the variant's stored price instead. To override the price, we must use
+        # 'applied_discount' to reduce the variant price down to per_unit_price.
         if variant_id:
             line_item = {
                 "variant_id": variant_id,
                 "quantity": quantity,
-                "price": str(per_unit_price),
                 "taxable": False  # Mark as non-taxable since price is tax-inclusive
             }
+            # Apply a discount to override the variant's selling price with the requested price
+            discount_per_unit = round(variant_price - per_unit_price, 2)
+            if discount_per_unit > 0:
+                # Variant price is higher — apply a fixed discount to reach per_unit_price
+                line_item["applied_discount"] = {
+                    "value_type": "fixed_amount",
+                    "value": str(discount_per_unit),
+                    "amount": str(round(discount_per_unit * quantity, 2)),
+                    "title": "Custom Price"
+                }
+                current_app.logger.info(
+                    f"Applying discount of {discount_per_unit} per unit "
+                    f"(variant price: {variant_price} → requested price: {per_unit_price})"
+                )
+            elif discount_per_unit < 0:
+                # Requested price exceeds variant price; fall back to custom line item
+                current_app.logger.warning(
+                    f"Requested price {per_unit_price} exceeds variant price {variant_price} for SKU {sku}. "
+                    f"Falling back to custom line item."
+                )
+                line_item = {
+                    "title": title,
+                    "sku": sku,
+                    "quantity": quantity,
+                    "price": str(per_unit_price),
+                    "taxable": False
+                }
+            # else: prices match exactly, no discount needed
         else:
             # Fallback to custom line item (no inventory tracking)
             line_item = {
