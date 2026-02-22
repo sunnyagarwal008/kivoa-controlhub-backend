@@ -107,6 +107,21 @@ class ShopifyService:
         response = requests.post(create_url, json=payload, headers=headers)
 
         if response.status_code not in [200, 201]:
+            # Handle race condition / phone format mismatch: the search missed an
+            # existing customer but Shopify still considers the phone taken.
+            # Re-query by phone and return that customer instead of failing.
+            if response.status_code == 422 and 'phone' in response.text and 'already been taken' in response.text:
+                current_app.logger.warning(
+                    f"Customer creation rejected (phone already taken) for {customer_phone}. "
+                    f"Re-searching to retrieve existing customer."
+                )
+                retry_response = requests.get(search_url, headers=headers)
+                if retry_response.status_code == 200:
+                    retry_customers = retry_response.json().get('customers', [])
+                    if retry_customers:
+                        customer = retry_customers[0]
+                        current_app.logger.info(f"Retrieved existing customer on retry: {customer.get('id')}")
+                        return customer
             error_msg = f"Shopify API error creating customer: {response.status_code} - {response.text}"
             current_app.logger.error(error_msg)
             raise Exception(error_msg)
