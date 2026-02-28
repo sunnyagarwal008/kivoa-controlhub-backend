@@ -148,8 +148,20 @@ def sync_product_to_amazon(product_id):
             channel_name='amazon'
         ).first()
 
+        # A ProductChannel DB row may exist from a previous failed or incomplete sync.
+        # Check whether Amazon actually has a live listing (non-empty summaries = ASIN exists).
+        # If summaries is empty the listing was never fully created, so we must PUT (create),
+        # not PATCH (update), to send all required attributes.
+        amazon_listing_exists = False
+        if existing_channel:
+            try:
+                live = amazon_service.get_product_listing(product.sku)
+                amazon_listing_exists = bool(live and live.get('summaries'))
+            except Exception:
+                amazon_listing_exists = False
+
         try:
-            if existing_channel:
+            if amazon_listing_exists:
                 # Update existing listing
                 current_app.logger.info(f"Updating existing Amazon listing for product {product_id}")
 
@@ -211,27 +223,45 @@ def sync_product_to_amazon(product_id):
                     gem_types=gem_types
                 )
 
-                # Create channel record
-                new_channel = ProductChannel(
-                    product_id=product_id,
-                    channel_name='amazon',
-                    channel_product_id=None,  # Amazon doesn't return product ID immediately
-                    channel_listing_id=product.sku,
-                    title=channel_title,
-                    description=channel_description,
-                    price=price,
-                    mrp=mrp,
-                    status='active',
-                    sync_status='synced',
-                    last_synced_at=datetime.utcnow(),
-                    channel_data={
+                # Update or create the channel record.
+                # existing_channel may already exist (from a prior failed/incomplete sync)
+                # even though the Amazon listing wasn't fully created — reuse it if so.
+                if existing_channel:
+                    existing_channel.title = channel_title
+                    existing_channel.description = channel_description
+                    existing_channel.price = price
+                    existing_channel.mrp = mrp
+                    existing_channel.status = 'active'
+                    existing_channel.sync_status = 'synced'
+                    existing_channel.last_synced_at = datetime.utcnow()
+                    existing_channel.error_message = None
+                    existing_channel.channel_data = {
                         'brand': brand,
                         'category': category,
                         'attributes': custom_attributes,
                         'last_sync_response': amazon_result
                     }
-                )
-                db.session.add(new_channel)
+                else:
+                    new_channel = ProductChannel(
+                        product_id=product_id,
+                        channel_name='amazon',
+                        channel_product_id=None,  # Amazon doesn't return product ID immediately
+                        channel_listing_id=product.sku,
+                        title=channel_title,
+                        description=channel_description,
+                        price=price,
+                        mrp=mrp,
+                        status='active',
+                        sync_status='synced',
+                        last_synced_at=datetime.utcnow(),
+                        channel_data={
+                            'brand': brand,
+                            'category': category,
+                            'attributes': custom_attributes,
+                            'last_sync_response': amazon_result
+                        }
+                    )
+                    db.session.add(new_channel)
 
             db.session.commit()
 

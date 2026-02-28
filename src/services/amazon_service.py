@@ -41,6 +41,12 @@ KIVOA_DEFAULTS = {
         {'type': 'Emerald', 'creation_method': 'Simulated', 'treatment_method': 'Not Treated'},
     ],
     'item_dimensions': {'length': 110.0, 'width': 40.0, 'height': 5.0},  # in mm
+    'item_weight': 50,  # grams — required by Amazon for JEWELRY_SET
+    'bullet_points': [
+        'Elegant jewellery set crafted with high-quality materials for a luxurious finish.',
+        'Versatile design suitable for weddings, parties, festivals and gifting.',
+        'Anti-tarnish, high-polish finish ensures long-lasting shine and durability.',
+    ],
 }
 
 
@@ -205,12 +211,13 @@ class AmazonService:
         # 2. brand
         attrs["brand"] = self._text_attr(brand or KIVOA_DEFAULTS['brand'])
 
-        # 3. bullet_point (Key Product Features) - multiple entries
-        if bullet_points and isinstance(bullet_points, list):
-            attrs["bullet_point"] = [
-                {"language_tag": "en_IN", "value": bp, "marketplace_id": mid}
-                for bp in bullet_points[:7]  # Amazon allows up to 7
-            ]
+        # 3. bullet_point (Key Product Features) — required by Amazon for JEWELRY_SET
+        resolved_bullets = bullet_points if (bullet_points and isinstance(bullet_points, list)) \
+            else KIVOA_DEFAULTS['bullet_points']
+        attrs["bullet_point"] = [
+            {"language_tag": "en_IN", "value": bp, "marketplace_id": mid}
+            for bp in resolved_bullets[:7]  # Amazon allows up to 7
+        ]
 
         # 4. product_description
         if description:
@@ -348,13 +355,12 @@ class AmazonService:
         attrs["skip_offer"] = self._value_attr(False)
         attrs["unit_count"] = [{"value": 1.0, "marketplace_id": mid}]
 
-        # Weight
-        if weight:
-            attrs["item_weight"] = [{
-                "unit": "grams",
-                "value": float(weight),
-                "marketplace_id": mid
-            }]
+        # Weight — required by Amazon for JEWELRY_SET; fall back to KIVOA default if not provided
+        attrs["item_weight"] = [{
+            "unit": "grams",
+            "value": float(weight) if weight else float(KIVOA_DEFAULTS['item_weight']),
+            "marketplace_id": mid
+        }]
 
         # == REMAINING CUSTOM ATTRIBUTES (already in Amazon format) ==
         # These are passed through directly — caller is responsible for format
@@ -714,7 +720,8 @@ class AmazonService:
         current_app.logger.info(f"Fetching Amazon listing for SKU: {sku}")
 
         response = requests.get(url, headers=headers, params={
-            "marketplaceIds": self.marketplace_id
+            "marketplaceIds": self.marketplace_id,
+            "includedData": "attributes,summaries,issues,offers,fulfillmentAvailability"
         })
 
         if response.status_code == 404:
