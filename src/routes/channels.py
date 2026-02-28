@@ -46,36 +46,72 @@ def get_product_channels(product_id):
 @channels_bp.route('/products/<int:product_id>/channels/amazon/sync', methods=['POST'])
 def sync_product_to_amazon(product_id):
     """
-    Manually sync a product to Amazon India
-    
+    Manually sync a product to Amazon India.
+
     POST /api/products/<product_id>/channels/amazon/sync
-    
-    Request body (optional):
+
+    All fields are optional. When omitted, values fall back to what is stored
+    on the product record. Provided values are saved to the product_channels
+    table so subsequent syncs reuse them.
+
+    Request body:
     {
-        "brand": "Your Brand Name",
-        "category": "JEWELRY",
-        "attributes": {
-            "metal_type": "Gold",
-            "stone_type": "Diamond"
-        }
+        "title":        (str)   Channel-specific listing title.
+                                Falls back to product.title if omitted.
+        "description":  (str)   Channel-specific product description.
+                                Falls back to product.description if omitted.
+        "price":        (float) Selling / offer price sent to Amazon.
+                                Falls back to product.price if omitted.
+        "mrp":          (float) Maximum Retail Price (strike-through price).
+                                Falls back to product.mrp if omitted.
+        "weight":       (float) Item weight in grams. Falls back to product.weight
+                                if omitted.
+        "color":        (str)   Color of the product (e.g. "Gold", "Silver").
+                                Falls back to KIVOA default ("Gold") if omitted.
+        "dimensions":   (obj)   Item dimensions in millimeters.
+                                e.g. {"length": 110.0, "width": 40.0, "height": 5.0}
+                                Falls back to KIVOA defaults if omitted.
+        "stones_data":  (list)  List of stone objects, each with:
+                                  - "type": stone name ("Pearl", "Cubic Zirconia", "Ruby", "Sapphire", "Emerald")
+                                  - "creation_method": e.g. "Simulated"
+                                  - "treatment_method": e.g. "Not Treated"
+                                Falls back to KIVOA defaults if omitted.
+        "gem_types":    (list)  List of gem type strings
+                                (e.g. ["Created Pearl", "Created Emerald", "Created Ruby", "Created Sapphire", "Cubic Zirconia", "Kundan", "Created Moissanite", "Artificial Stones"]).
+                                Falls back to KIVOA defaults if omitted.
     }
+
+    Images are sourced automatically from the product's approved images.
+    White-background images are placed first to satisfy Amazon's main-image
+    requirement. At least one white-background image must exist.
     """
     try:
         product = Product.query.get(product_id)
-        
+
         if not product:
             return jsonify({
                 'success': False,
                 'error': 'Product not found'
             }), 404
-        
+
+        # Get optional parameters from request
+        data = request.get_json() or {}
+
+        # Use channel-specific overrides if provided, otherwise fall back to product fields
+        channel_title = data.get('title') or product.title
+        channel_description = data.get('description') or product.description
+        channel_price = data.get('price')
+        channel_mrp = data.get('mrp')
+        price = float(channel_price) if channel_price is not None else float(product.price)
+        mrp = float(channel_mrp) if channel_mrp is not None else (float(product.mrp) if product.mrp else None)
+
         # Check if product has required fields
-        if not product.title or not product.description:
+        if not channel_title or not channel_description:
             return jsonify({
                 'success': False,
                 'error': 'Product must have title and description before syncing to Amazon'
             }), 400
-        
+
         # Get images — white background image must come first (Amazon requirement)
         sorted_images = sorted(product.product_images, key=lambda x: x.priority or 999)
         white_bg_images = [img for img in sorted_images if img.is_white_background]
@@ -90,46 +126,57 @@ def sync_product_to_amazon(product_id):
         # White background image(s) first, then the rest
         approved_images = [img.image_url for img in white_bg_images + other_images]
 
-        # Get optional parameters from request
-        data = request.get_json() or {}
         brand = data.get('brand', 'KIVOA')
         category = data.get('category', 'JEWELRY_SET')
         custom_attributes = data.get('attributes', {})
         bullet_points = data.get('bullet_points', None)
         weight = data.get('weight', None) or product.weight
+        color = data.get('color', None)
+        dimensions = data.get('dimensions', None)
+        stones_data = data.get('stones_data', None)
+        gem_types = data.get('gem_types', None)
 
         # Remove keys that are handled as dedicated params so they don't
         # leak into the Amazon payload as raw/malformed attributes
-        for key in ('weight', 'bullet_points', 'brand', 'category'):
+        for key in ('weight', 'bullet_points', 'brand', 'category',
+                    'color', 'item_dimensions', 'stones', 'gem_type'):
             custom_attributes.pop(key, None)
-        
+
         # Check if product is already synced to Amazon
         existing_channel = ProductChannel.query.filter_by(
             product_id=product_id,
             channel_name='amazon'
         ).first()
-        
+
         try:
             if existing_channel:
                 # Update existing listing
                 current_app.logger.info(f"Updating existing Amazon listing for product {product_id}")
-                
+
                 amazon_result = amazon_service.update_product_listing(
                     sku=product.sku,
-                    title=product.title,
-                    description=product.description,
-                    price=float(product.price),
+                    title=channel_title,
+                    description=channel_description,
+                    price=price,
                     quantity=product.inventory,
                     images=approved_images,
                     attributes=custom_attributes,
                     category=category,
                     brand=brand,
-                    mrp=float(product.mrp) if product.mrp else None,
+                    mrp=mrp,
                     weight=weight,
-                    bullet_points=bullet_points
+                    bullet_points=bullet_points,
+                    dimensions=dimensions,
+                    color=color,
+                    stones_data=stones_data,
+                    gem_types=gem_types
                 )
 
                 # Update channel record
+                existing_channel.title = channel_title
+                existing_channel.description = channel_description
+                existing_channel.price = price
+                existing_channel.mrp = mrp
                 existing_channel.status = 'active'
                 existing_channel.sync_status = 'synced'
                 existing_channel.last_synced_at = datetime.utcnow()
@@ -140,32 +187,40 @@ def sync_product_to_amazon(product_id):
                     'attributes': custom_attributes,
                     'last_sync_response': amazon_result
                 }
-                
+
             else:
                 # Create new listing
                 current_app.logger.info(f"Creating new Amazon listing for product {product_id}")
-                
+
                 amazon_result = amazon_service.create_product_listing(
                     sku=product.sku,
-                    title=product.title,
-                    description=product.description,
-                    price=float(product.price),
+                    title=channel_title,
+                    description=channel_description,
+                    price=price,
                     quantity=product.inventory,
                     brand=brand,
                     category=category,
                     images=approved_images,
                     attributes=custom_attributes,
-                    mrp=float(product.mrp) if product.mrp else None,
+                    mrp=mrp,
                     weight=weight,
-                    bullet_points=bullet_points
+                    bullet_points=bullet_points,
+                    dimensions=dimensions,
+                    color=color,
+                    stones_data=stones_data,
+                    gem_types=gem_types
                 )
-                
+
                 # Create channel record
                 new_channel = ProductChannel(
                     product_id=product_id,
                     channel_name='amazon',
                     channel_product_id=None,  # Amazon doesn't return product ID immediately
                     channel_listing_id=product.sku,
+                    title=channel_title,
+                    description=channel_description,
+                    price=price,
+                    mrp=mrp,
                     status='active',
                     sync_status='synced',
                     last_synced_at=datetime.utcnow(),
@@ -177,9 +232,9 @@ def sync_product_to_amazon(product_id):
                     }
                 )
                 db.session.add(new_channel)
-            
+
             db.session.commit()
-            
+
             return jsonify({
                 'success': True,
                 'message': f"Product {product.sku} successfully synced to Amazon",
@@ -188,12 +243,12 @@ def sync_product_to_amazon(product_id):
                 'channel': 'amazon',
                 'amazon_response': amazon_result
             }), 200
-            
+
         except Exception as amazon_error:
             # Log the error and update channel status
             error_msg = str(amazon_error)
             current_app.logger.error(f"Amazon API error for product {product_id}: {error_msg}")
-            
+
             if existing_channel:
                 existing_channel.sync_status = 'failed'
                 existing_channel.error_message = error_msg
@@ -214,9 +269,9 @@ def sync_product_to_amazon(product_id):
                     }
                 )
                 db.session.add(failed_channel)
-            
+
             db.session.commit()
-            
+
             return jsonify({
                 'success': False,
                 'error': f"Failed to sync to Amazon: {error_msg}",
@@ -421,7 +476,10 @@ def get_channel_listings(channel_name):
                     "product_id": 1,
                     "channel_listing_id": "ABC-0001-0124",
                     "product_image": "https://...",
-                    "title": "Gold Ring"
+                    "title": "Gold Ring",
+                    "description": "Beautiful gold ring",
+                    "price": 999.00,
+                    "mrp": 1299.00
                 }
             ],
             "pagination": {
@@ -466,7 +524,10 @@ def get_channel_listings(channel_name):
                 'product_id': pc.product_id,
                 'channel_listing_id': pc.channel_listing_id,
                 'product_image': image_map.get(pc.product_id),
-                'title': pc.product.title if pc.product else None,
+                'title': pc.title or (pc.product.title if pc.product else None),
+                'description': pc.description or (pc.product.description if pc.product else None),
+                'price': float(pc.price) if pc.price is not None else (float(pc.product.price) if pc.product and pc.product.price else None),
+                'mrp': float(pc.mrp) if pc.mrp is not None else (float(pc.product.mrp) if pc.product and pc.product.mrp else None),
             }
             for pc in pagination.items
         ]

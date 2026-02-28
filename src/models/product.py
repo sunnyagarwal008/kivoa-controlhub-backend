@@ -247,6 +247,10 @@ class ProductChannel(db.Model):
     channel_name = db.Column(db.String(50), nullable=False)  # e.g., 'shopify', 'amazon', 'flipkart'
     channel_product_id = db.Column(db.String(255), nullable=True)  # External channel's product ID
     channel_listing_id = db.Column(db.String(255), nullable=True)  # External channel's listing/SKU ID
+    title = db.Column(db.String(500), nullable=True)  # Channel-specific product title
+    description = db.Column(db.Text, nullable=True)  # Channel-specific product description
+    price = db.Column(db.Numeric(10, 2), nullable=True)  # Channel-specific selling price
+    mrp = db.Column(db.Numeric(10, 2), nullable=True)  # Channel-specific MRP
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending, active, inactive, error
     sync_status = db.Column(db.String(20), nullable=False, default='pending')  # pending, synced, failed
     last_synced_at = db.Column(db.DateTime, nullable=True)
@@ -274,6 +278,10 @@ class ProductChannel(db.Model):
             'channel_name': self.channel_name,
             'channel_product_id': self.channel_product_id,
             'channel_listing_id': self.channel_listing_id,
+            'title': self.title,
+            'description': self.description,
+            'price': float(self.price) if self.price is not None else None,
+            'mrp': float(self.mrp) if self.mrp is not None else None,
             'status': self.status,
             'sync_status': self.sync_status,
             'last_synced_at': self.last_synced_at.isoformat() if self.last_synced_at else None,

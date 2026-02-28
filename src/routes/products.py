@@ -6,7 +6,7 @@ from marshmallow import ValidationError
 from sqlalchemy.orm import joinedload, contains_eager
 
 from src.database import db
-from src.models import Category, Product, ProductImage, Prompt
+from src.models import Category, Product, ProductImage, ProductChannel, Prompt
 from src.schemas import ProductSchema
 from src.services import sqs_service, s3_service, gemini_service
 from src.services.gemini_service import download_image
@@ -467,7 +467,7 @@ def get_products():
 @products_bp.route('/products/<int:product_id>', methods=['GET'])
 def get_product(product_id):
     """
-    Get a single product by ID with category details and images
+    Get a single product by ID with category details, images, and synced channels
 
     Response:
         {
@@ -478,6 +478,7 @@ def get_product(product_id):
                 "category": "Electronics",
                 "category_details": {...},
                 "images": [...],
+                "synced_channels": ["amazon", "shopify"],
                 ...
             }
         }
@@ -489,9 +490,18 @@ def get_product(product_id):
             joinedload(Product.product_images)
         ).get_or_404(product_id)
 
+        # Fetch channels that have been successfully synced
+        synced_channels = ProductChannel.query.filter_by(
+            product_id=product_id,
+            sync_status='synced'
+        ).with_entities(ProductChannel.channel_name).all()
+
+        product_data = product.to_dict(include_category_details=True, include_images=True)
+        product_data['synced_channels'] = [row.channel_name for row in synced_channels]
+
         return jsonify({
             'success': True,
-            'data': product.to_dict(include_category_details=True, include_images=True)
+            'data': product_data
         }), 200
 
     except Exception as e:

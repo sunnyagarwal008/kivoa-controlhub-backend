@@ -155,7 +155,9 @@ class AmazonService:
 
     def create_product_listing(self, sku, title, description, price, quantity,
                               brand, category, images=None, attributes=None,
-                              mrp=None, weight=None, bullet_points=None):
+                              mrp=None, weight=None, bullet_points=None,
+                              dimensions=None, color=None, stones_data=None,
+                              gem_types=None):
         """
         Create a new product listing on Amazon India.
 
@@ -175,6 +177,14 @@ class AmazonService:
             mrp: Maximum retail price in INR (for strikethrough pricing)
             weight: Product weight in grams
             bullet_points: List of bullet point strings for key product features
+            dimensions: Dict with 'length', 'width', 'height' keys in millimeters
+                        e.g. {"length": 110.0, "width": 40.0, "height": 5.0}
+            color: Color string (e.g. "Gold", "Silver"). Falls back to KIVOA_DEFAULTS.
+            stones_data: List of stone dicts, each with 'type', 'creation_method',
+                         and 'treatment_method' keys.
+                         e.g. [{"type": "Pearl", "creation_method": "Simulated",
+                                 "treatment_method": "Not Treated"}]
+            gem_types: List of gem type strings (e.g. ["Created Pearl", "Created Ruby"]).
 
         Returns:
             dict: Response from Amazon API
@@ -282,7 +292,7 @@ class AmazonService:
             (attributes or {}).pop('metal_type', KIVOA_DEFAULTS['metal_type'])
         )
         attrs["color"] = self._text_attr(
-            (attributes or {}).pop('color', KIVOA_DEFAULTS['color'])
+            color or (attributes or {}).pop('color', KIVOA_DEFAULTS['color'])
         )
         attrs["size"] = self._text_attr(
             (attributes or {}).pop('size', KIVOA_DEFAULTS['size'])
@@ -303,16 +313,16 @@ class AmazonService:
         )
 
         # == GEM TYPE (multiple text entries) ==
-        gem_types = (attributes or {}).pop('gem_type', KIVOA_DEFAULTS['gem_type'])
-        if gem_types and isinstance(gem_types, list):
+        resolved_gem_types = gem_types or (attributes or {}).pop('gem_type', KIVOA_DEFAULTS['gem_type'])
+        if resolved_gem_types and isinstance(resolved_gem_types, list):
             attrs["gem_type"] = [
                 {"language_tag": "en_IN", "value": gt, "marketplace_id": mid}
-                for gt in gem_types
+                for gt in resolved_gem_types
             ]
 
         # == STONES (complex nested format) ==
-        stones_data = (attributes or {}).pop('stones', KIVOA_DEFAULTS['stones'])
-        if stones_data and isinstance(stones_data, list):
+        resolved_stones = stones_data or (attributes or {}).pop('stones', KIVOA_DEFAULTS['stones'])
+        if resolved_stones and isinstance(resolved_stones, list):
             attrs["stones"] = [
                 {
                     "id": i + 1,
@@ -321,16 +331,16 @@ class AmazonService:
                     "treatment_method": {"language_tag": "en_IN", "value": s.get('treatment_method', 'Not Treated')},
                     "marketplace_id": mid
                 }
-                for i, s in enumerate(stones_data)
+                for i, s in enumerate(resolved_stones)
             ]
 
         # == ITEM DIMENSIONS ==
-        dims = (attributes or {}).pop('item_dimensions', KIVOA_DEFAULTS['item_dimensions'])
-        if dims:
+        resolved_dims = dimensions or (attributes or {}).pop('item_dimensions', KIVOA_DEFAULTS['item_dimensions'])
+        if resolved_dims:
             attrs["item_dimensions"] = [{
-                "length": {"unit": "millimeters", "value": float(dims.get('length', 110))},
-                "width": {"unit": "millimeters", "value": float(dims.get('width', 40))},
-                "height": {"unit": "millimeters", "value": float(dims.get('height', 5))},
+                "length": {"unit": "millimeters", "value": float(resolved_dims.get('length', 110))},
+                "width": {"unit": "millimeters", "value": float(resolved_dims.get('width', 40))},
+                "height": {"unit": "millimeters", "value": float(resolved_dims.get('height', 5))},
                 "marketplace_id": mid
             }]
 
@@ -383,7 +393,8 @@ class AmazonService:
     def update_product_listing(self, sku, title=None, description=None, price=None,
                               quantity=None, images=None, attributes=None,
                               category=None, brand=None, mrp=None, weight=None,
-                              bullet_points=None):
+                              bullet_points=None, dimensions=None, color=None,
+                              stones_data=None, gem_types=None):
         """
         Update an existing product listing on Amazon India using PATCH.
 
@@ -405,6 +416,11 @@ class AmazonService:
             mrp: Maximum retail price in INR (optional)
             weight: Product weight in grams (optional)
             bullet_points: List of bullet point strings (optional)
+            dimensions: Dict with 'length', 'width', 'height' keys in millimeters (optional)
+            color: Color string (optional, e.g. "Gold")
+            stones_data: List of stone dicts with 'type', 'creation_method',
+                         'treatment_method' keys (optional)
+            gem_types: List of gem type strings (optional)
 
         Returns:
             dict: Response from Amazon API
@@ -495,7 +511,60 @@ class AmazonService:
                 "value": [{"unit": "grams", "value": float(weight), "marketplace_id": mid}]
             })
 
-        # == KNOWN ATTRIBUTE KEYS (pop and wrap in proper Amazon format) ==
+        # Color (explicit param takes priority over attributes dict)
+        resolved_color = color or (attributes or {}).pop('color', None)
+        if resolved_color:
+            patches.append({
+                "op": "replace",
+                "path": "/attributes/color",
+                "value": self._text_attr(resolved_color)
+            })
+
+        # Gem types (explicit param takes priority over attributes dict)
+        resolved_gem_types = gem_types or (attributes or {}).pop('gem_type', None)
+        if resolved_gem_types and isinstance(resolved_gem_types, list):
+            patches.append({
+                "op": "replace",
+                "path": "/attributes/gem_type",
+                "value": [
+                    {"language_tag": "en_IN", "value": gt, "marketplace_id": mid}
+                    for gt in resolved_gem_types
+                ]
+            })
+
+        # Stones (explicit param takes priority over attributes dict)
+        resolved_stones = stones_data or (attributes or {}).pop('stones', None)
+        if resolved_stones and isinstance(resolved_stones, list):
+            patches.append({
+                "op": "replace",
+                "path": "/attributes/stones",
+                "value": [
+                    {
+                        "id": i + 1,
+                        "type": {"language_tag": "en_IN", "value": s.get('type', 'Pearl')},
+                        "creation_method": {"language_tag": "en_IN", "value": s.get('creation_method', 'Simulated')},
+                        "treatment_method": {"language_tag": "en_IN", "value": s.get('treatment_method', 'Not Treated')},
+                        "marketplace_id": mid
+                    }
+                    for i, s in enumerate(resolved_stones)
+                ]
+            })
+
+        # Dimensions (explicit param takes priority over attributes dict)
+        resolved_dims = dimensions or (attributes or {}).pop('item_dimensions', None)
+        if resolved_dims and isinstance(resolved_dims, dict):
+            patches.append({
+                "op": "replace",
+                "path": "/attributes/item_dimensions",
+                "value": [{
+                    "length": {"unit": "millimeters", "value": float(resolved_dims.get('length', 110))},
+                    "width": {"unit": "millimeters", "value": float(resolved_dims.get('width', 40))},
+                    "height": {"unit": "millimeters", "value": float(resolved_dims.get('height', 5))},
+                    "marketplace_id": mid
+                }]
+            })
+
+        # == REMAINING KNOWN ATTRIBUTE KEYS (pop and wrap in proper Amazon format) ==
         if attributes:
             # Value-type attributes (marketplace_id only)
             value_keys = {
@@ -520,7 +589,6 @@ class AmazonService:
                 'department': 'department',
                 'material': 'material',
                 'metal_type': 'metal_type',
-                'color': 'color',
                 'size': 'size',
                 'item_type_name': 'item_type_name',
             }
@@ -532,50 +600,6 @@ class AmazonService:
                         "path": f"/attributes/{amz_key}",
                         "value": self._text_attr(val)
                     })
-
-            # Gem type (multiple text entries)
-            gem_types = attributes.pop('gem_type', None)
-            if gem_types and isinstance(gem_types, list):
-                patches.append({
-                    "op": "replace",
-                    "path": "/attributes/gem_type",
-                    "value": [
-                        {"language_tag": "en_IN", "value": gt, "marketplace_id": mid}
-                        for gt in gem_types
-                    ]
-                })
-
-            # Stones (complex nested format)
-            stones_data = attributes.pop('stones', None)
-            if stones_data and isinstance(stones_data, list):
-                patches.append({
-                    "op": "replace",
-                    "path": "/attributes/stones",
-                    "value": [
-                        {
-                            "id": i + 1,
-                            "type": {"language_tag": "en_IN", "value": s.get('type', 'Pearl')},
-                            "creation_method": {"language_tag": "en_IN", "value": s.get('creation_method', 'Simulated')},
-                            "treatment_method": {"language_tag": "en_IN", "value": s.get('treatment_method', 'Not Treated')},
-                            "marketplace_id": mid
-                        }
-                        for i, s in enumerate(stones_data)
-                    ]
-                })
-
-            # Item dimensions
-            dims = attributes.pop('item_dimensions', None)
-            if dims and isinstance(dims, dict):
-                patches.append({
-                    "op": "replace",
-                    "path": "/attributes/item_dimensions",
-                    "value": [{
-                        "length": {"unit": "millimeters", "value": float(dims.get('length', 110))},
-                        "width": {"unit": "millimeters", "value": float(dims.get('width', 40))},
-                        "height": {"unit": "millimeters", "value": float(dims.get('height', 5))},
-                        "marketplace_id": mid
-                    }]
-                })
 
             # HSN code (special format)
             hsn = attributes.pop('hsn_code', None)
