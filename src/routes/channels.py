@@ -4,7 +4,7 @@ Routes for managing product channels (Amazon, Shopify, etc.)
 from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app
 from src.database import db
-from src.models import Product, ProductChannel
+from src.models import Product, ProductChannel, ProductImage
 from src.services import amazon_service
 
 channels_bp = Blueprint('channels', __name__)
@@ -395,6 +395,96 @@ def get_amazon_product_type(product_type):
         
     except Exception as e:
         current_app.logger.error(f"Error fetching product type definition: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@channels_bp.route('/channels/<string:channel_name>/listings', methods=['GET'])
+def get_channel_listings(channel_name):
+    """
+    Get paginated minimal listings for a channel (e.g. amazon, shopify)
+
+    GET /api/channels/<channel_name>/listings
+
+    Query params:
+        - page: Page number (default: 1)
+        - per_page: Items per page (default: 20)
+
+    Response:
+        {
+            "success": true,
+            "channel": "amazon",
+            "data": [
+                {
+                    "product_id": 1,
+                    "channel_listing_id": "ABC-0001-0124",
+                    "product_image": "https://...",
+                    "title": "Gold Ring"
+                }
+            ],
+            "pagination": {
+                "page": 1,
+                "per_page": 20,
+                "total": 100,
+                "pages": 5
+            }
+        }
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+
+        pagination = (
+            ProductChannel.query
+            .filter_by(channel_name=channel_name)
+            .options(db.joinedload(ProductChannel.product))
+            .order_by(ProductChannel.id.desc())
+            .paginate(page=page, per_page=per_page, error_out=False)
+        )
+
+        # Batch-fetch the highest-priority white background image for each product
+        product_ids = [pc.product_id for pc in pagination.items]
+        image_map = {}
+        if product_ids:
+            white_bg_images = (
+                ProductImage.query
+                .filter(
+                    ProductImage.product_id.in_(product_ids),
+                    ProductImage.is_white_background == True
+                )
+                .order_by(ProductImage.product_id, ProductImage.priority)
+                .all()
+            )
+            for img in white_bg_images:
+                if img.product_id not in image_map:
+                    image_map[img.product_id] = img.image_url
+
+        data = [
+            {
+                'product_id': pc.product_id,
+                'channel_listing_id': pc.channel_listing_id,
+                'product_image': image_map.get(pc.product_id),
+                'title': pc.product.title if pc.product else None,
+            }
+            for pc in pagination.items
+        ]
+
+        return jsonify({
+            'success': True,
+            'channel': channel_name,
+            'data': data,
+            'pagination': {
+                'page': pagination.page,
+                'per_page': pagination.per_page,
+                'total': pagination.total,
+                'pages': pagination.pages,
+            }
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error fetching channel listings for {channel_name}: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
