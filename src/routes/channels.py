@@ -96,6 +96,7 @@ def sync_product_to_amazon(product_id):
 
         # Get optional parameters from request
         data = request.get_json() or {}
+        current_app.logger.info(f"[Amazon sync] product_id={product_id} sku={product.sku} request_body={data}")
 
         # Use channel-specific overrides if provided, otherwise fall back to product fields
         channel_title = data.get('title') or product.title
@@ -105,8 +106,19 @@ def sync_product_to_amazon(product_id):
         price = float(channel_price) if channel_price is not None else float(product.price)
         mrp = float(channel_mrp) if channel_mrp is not None else (float(product.mrp) if product.mrp else None)
 
+        current_app.logger.info(
+            f"[Amazon sync] sku={product.sku} "
+            f"title={'SET' if channel_title else 'MISSING'} "
+            f"description={'SET' if channel_description else 'MISSING'} "
+            f"price={price} mrp={mrp}"
+        )
+
         # Check if product has required fields
         if not channel_title or not channel_description:
+            current_app.logger.warning(
+                f"[Amazon sync] 400 — missing title/description for sku={product.sku}: "
+                f"title={repr(channel_title)} description={repr(channel_description)[:80] if channel_description else None}"
+            )
             return jsonify({
                 'success': False,
                 'error': 'Product must have title and description before syncing to Amazon'
@@ -117,7 +129,22 @@ def sync_product_to_amazon(product_id):
         white_bg_images = [img for img in sorted_images if img.is_white_background]
         other_images = [img for img in sorted_images if not img.is_white_background]
 
+        current_app.logger.info(
+            f"[Amazon sync] sku={product.sku} "
+            f"total_images={len(sorted_images)} "
+            f"white_bg={len(white_bg_images)} "
+            f"other={len(other_images)}"
+        )
+        for img in sorted_images:
+            current_app.logger.info(
+                f"[Amazon sync]   image id={img.id} priority={img.priority} "
+                f"is_white_background={img.is_white_background} url={img.image_url}"
+            )
+
         if not white_bg_images:
+            current_app.logger.warning(
+                f"[Amazon sync] 400 — no white background image for sku={product.sku}"
+            )
             return jsonify({
                 'success': False,
                 'error': 'Product must have at least one white background image for Amazon (main image requirement)'
